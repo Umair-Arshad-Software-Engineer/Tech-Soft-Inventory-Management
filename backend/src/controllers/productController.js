@@ -8,12 +8,12 @@ const {
   Unit,
   Customer,
   CustomerPrice,
-  // ── Added for getProductHistory ──
   Sale,
   SaleItem,
   PurchaseReceipt,
   PurchaseReceiptItem,
   PurchaseOrder,
+  DamagedStock,  // ADD THIS
 } = require('../models');
 
 
@@ -127,6 +127,21 @@ exports.getProductHistory = async (req, res) => {
       results.purchase_count = purchaseCount;
     }
 
+    // ── Damaged stock history ────────────────────────────────────────────
+    if (!type || type === 'damaged') {
+      const { count: damagedCount, rows: damagedItems } = await DamagedStock.findAndCountAll({
+        where: { product_id: id },
+        attributes: ['id', 'quantity', 'reason', 'status', 'notes', 'estimated_loss', 'actual_loss', 'created_at', 'updated_at'],
+        order: [['created_at', 'DESC']],
+        limit: type === 'damaged' ? limitNum : undefined,
+        offset: type === 'damaged' ? offset : undefined,
+        distinct: true,
+      });
+
+      results.damaged_history = damagedItems;
+      results.damaged_count = damagedCount;
+    }
+
     res.json({
       success: true,
       data: results,
@@ -134,6 +149,27 @@ exports.getProductHistory = async (req, res) => {
     });
   } catch (error) {
     console.error('Get product history error:', error);
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+};
+
+// Check if barcode exists
+exports.checkBarcodeExists = async (req, res) => {
+  try {
+    const { barcode } = req.query;
+    
+    if (!barcode) {
+      return res.status(400).json({ success: false, message: 'Barcode is required' });
+    }
+    
+    const product = await Product.findOne({ where: { barcode } });
+    
+    res.json({ 
+      success: true, 
+      exists: !!product 
+    });
+  } catch (error) {
+    console.error('Check barcode error:', error);
     res.status(500).json({ success: false, message: 'Server error', error: error.message });
   }
 };

@@ -214,27 +214,34 @@ exports.addAdjustment = async (req, res) => {
 };
 
 // Add this new function
+// customerLedgerController.js — getCustomerPayments
 exports.getCustomerPayments = async (req, res) => {
   try {
     const { customerId } = req.params;
-    const { page = 1, limit = 20 } = req.query;
+    const { page = 1, limit = 20, payment_method } = req.query;  // ← add payment_method
 
     const pageNum = parseInt(page);
     const limitNum = parseInt(limit);
     const offset = (pageNum - 1) * limitNum;
 
-    // Check if customer exists
     const customer = await Customer.findByPk(customerId);
     if (!customer) {
       return res.status(404).json({ success: false, message: 'Customer not found' });
     }
 
-    // Get only payment transactions
+    // Build where clause
+    const where = {
+      customer_id: customerId,
+      transaction_type: 'payment',
+    };
+
+    // ← Add this: filter by payment_method if provided
+    if (payment_method && payment_method !== 'all') {
+      where.payment_method = payment_method;
+    }
+
     const { count, rows: payments } = await CustomerLedger.findAndCountAll({
-      where: { 
-        customer_id: customerId,
-        transaction_type: 'payment'
-      },
+      where,
       order: [['date', 'DESC'], ['id', 'DESC']],
       limit: limitNum,
       offset,
@@ -257,3 +264,47 @@ exports.getCustomerPayments = async (req, res) => {
     res.status(500).json({ success: false, message: 'Server error', error: error.message });
   }
 };
+// exports.getCustomerPayments = async (req, res) => {
+//   try {
+//     const { customerId } = req.params;
+//     const { page = 1, limit = 20 } = req.query;
+
+//     const pageNum = parseInt(page);
+//     const limitNum = parseInt(limit);
+//     const offset = (pageNum - 1) * limitNum;
+
+//     // Check if customer exists
+//     const customer = await Customer.findByPk(customerId);
+//     if (!customer) {
+//       return res.status(404).json({ success: false, message: 'Customer not found' });
+//     }
+
+//     // Get only payment transactions
+//     const { count, rows: payments } = await CustomerLedger.findAndCountAll({
+//       where: { 
+//         customer_id: customerId,
+//         transaction_type: 'payment'
+//       },
+//       order: [['date', 'DESC'], ['id', 'DESC']],
+//       limit: limitNum,
+//       offset,
+//     });
+
+//     res.json({
+//       success: true,
+//       data: {
+//         payments,
+//         pagination: {
+//           total: count,
+//           page: pageNum,
+//           limit: limitNum,
+//           pages: Math.ceil(count / limitNum),
+//         },
+//       },
+//     });
+//   } catch (error) {
+//     console.error('Get customer payments error:', error);
+//     res.status(500).json({ success: false, message: 'Server error', error: error.message });
+//   }
+// };
+

@@ -1,6 +1,8 @@
 // lib/models/sale_model.dart
 import 'package:flutter/material.dart';
 
+// lib/models/sale_model.dart - Update the class
+
 class SaleModel {
   final int id;
   final String invoiceNumber;
@@ -24,6 +26,11 @@ class SaleModel {
   final DateTime createdAt;
   final DateTime updatedAt;
 
+  // Make these nullable and non-final by using "late" or making them not final
+  String? returnStatus;
+  double? returnAmount;
+  List<dynamic>? returns;
+
   SaleModel({
     required this.id,
     required this.invoiceNumber,
@@ -46,14 +53,15 @@ class SaleModel {
     this.items,
     required this.createdAt,
     required this.updatedAt,
+    this.returnStatus,
+    this.returnAmount,
+    this.returns,
   });
 
   double get outstandingBalance => grandTotal - amountPaid;
   bool get isFullyPaid => paymentStatus == 'paid';
-  bool get isOverdue => dueDate != null && dueDate!.isBefore(DateTime.now()) && !isFullyPaid;
-
-
-
+  bool get isOverdue =>
+      dueDate != null && dueDate!.isBefore(DateTime.now()) && !isFullyPaid;
 
   Color get statusColor {
     switch (paymentStatus) {
@@ -69,7 +77,7 @@ class SaleModel {
   }
 
   factory SaleModel.fromJson(Map<String, dynamic> json) {
-    // Helper function to safely convert to double
+    // Safely convert any numeric value (int, double, or String) to double
     double toDoubleSafe(dynamic value) {
       if (value == null) return 0.0;
       if (value is double) return value;
@@ -85,7 +93,7 @@ class SaleModel {
       return 0.0;
     }
 
-    // Helper function to safely parse date
+    // Safely parse ISO date strings
     DateTime parseDateSafe(String? dateStr) {
       if (dateStr == null) return DateTime.now();
       try {
@@ -96,12 +104,35 @@ class SaleModel {
       }
     }
 
+    // Parse returns data correctly
+    List<dynamic> parseReturns(dynamic returnsData) {
+      if (returnsData == null) return [];
+
+      if (returnsData is List) {
+        return returnsData.map((ret) {
+          final Map<String, dynamic> returnMap = Map<String, dynamic>.from(ret);
+
+          if (returnMap['items'] != null && returnMap['items'] is List) {
+            returnMap['items'] = (returnMap['items'] as List).map((item) {
+              return Map<String, dynamic>.from(item);
+            }).toList();
+          }
+
+          return returnMap;
+        }).toList();
+      }
+
+      return [];
+    }
+
     return SaleModel(
       id: json['id'] ?? 0,
       invoiceNumber: json['invoice_number'] ?? '',
       saleType: json['sale_type'] ?? 'pos',
       customerId: json['customer_id'],
-      customer: json['customer'] != null ? CustomerInfo.fromJson(json['customer']) : null,
+      customer: json['customer'] != null
+          ? CustomerInfo.fromJson(json['customer'])
+          : null,
       saleDate: parseDateSafe(json['sale_date']),
       dueDate: json['due_date'] != null ? parseDateSafe(json['due_date']) : null,
       subtotal: toDoubleSafe(json['subtotal']),
@@ -116,13 +147,20 @@ class SaleModel {
       paymentStatus: json['payment_status'] ?? 'unpaid',
       notes: json['notes'],
       items: json['items'] != null
-          ? (json['items'] as List).map((e) => SaleItemModel.fromJson(e)).toList()
+          ? (json['items'] as List)
+          .map((e) => SaleItemModel.fromJson(e))
+          .toList()
           : null,
       createdAt: parseDateSafe(json['created_at']),
       updatedAt: parseDateSafe(json['updated_at']),
+      returnStatus: json['return_status'],
+      returnAmount: toDoubleSafe(json['return_amount']),
+      returns: parseReturns(json['returns']),
     );
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 class CustomerInfo {
   final int id;
@@ -153,6 +191,8 @@ class CustomerInfo {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+
 class SaleItemModel {
   final int id;
   final int? productId;
@@ -175,7 +215,6 @@ class SaleItemModel {
   });
 
   factory SaleItemModel.fromJson(Map<String, dynamic> json) {
-    // Helper function to safely convert to double
     double toDoubleSafe(dynamic value) {
       if (value == null) return 0.0;
       if (value is double) return value;
@@ -199,10 +238,14 @@ class SaleItemModel {
       unitPrice: toDoubleSafe(json['unit_price']),
       quantity: json['quantity'] ?? 0,
       totalPrice: toDoubleSafe(json['total_price']),
-      product: json['product'] != null ? ProductInfo.fromJson(json['product']) : null,
+      product: json['product'] != null
+          ? ProductInfo.fromJson(json['product'])
+          : null,
     );
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 class ProductInfo {
   final int id;
@@ -226,6 +269,8 @@ class ProductInfo {
     );
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 class UnitInfo {
   final int id;

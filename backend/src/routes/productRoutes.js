@@ -17,6 +17,7 @@ router.delete('/:id', productController.deleteProduct);
 router.patch('/:id/toggle-status', productController.toggleProductStatus);
 router.patch('/:id/quantity', productController.updateProductQuantity);
 router.get('/:id/history', productController.getProductHistory);
+router.get('/check-barcode', productController.checkBarcodeExists);
 
 
 module.exports = router;

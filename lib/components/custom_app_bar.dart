@@ -25,6 +25,7 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context) {
     return AppBar(
+      automaticallyImplyLeading: false,
       title: Text(
         title,
         style: TextStyle(
@@ -37,13 +38,13 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
       backgroundColor: backgroundColor ?? Colors.white,
       elevation: elevation,
       centerTitle: false,
-      leading: leading ?? (showBackButton
-          ? IconButton(
-        icon: const Icon(Icons.arrow_back_ios, size: 20),
-        color: titleColor ?? const Color(0xFF2D3142),
-        onPressed: onBackPressed ?? () => Navigator.pop(context),
-      )
-          : null),
+      // leading: leading ?? (showBackButton
+      //     ? IconButton(
+      //   icon: const Icon(Icons.arrow_back_ios, size: 20),
+      //   color: titleColor ?? const Color(0xFF2D3142),
+      //   onPressed: onBackPressed ?? () => Navigator.pop(context),
+      // )
+      //     : null),
       actions: actions,
       bottom: PreferredSize(
         preferredSize: const Size.fromHeight(1),

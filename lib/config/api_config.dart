@@ -4,7 +4,7 @@ class ApiConfig {
   // Change this to your computer's IP address for physical device testing
   // Use 10.0.2.2 for Android emulator
   // Use localhost for iOS simulator
-  static const String baseUrl = 'http://localhost:3000/api';
+  static const String baseUrl = 'http://192.168.1.118:3000/api';
 
   // ── Auth ─────────────────────────────────────────────────────────
   static const String registerUrl = '$baseUrl/auth/register';
@@ -51,4 +51,9 @@ class ApiConfig {
   static String saleUrl(int id)                  => '$baseUrl/sales/$id';
   static const String salesDailySummaryUrl       = '$baseUrl/sales/summary/daily';
   static String salePaymentUrl(int id)           => '$baseUrl/sales/$id/payment';
+
+  // In api_config.dart, add under Sales section:
+  static const String saleReturnsUrl         = '$baseUrl/sales/returns';
+  static String saleReturnUrl(int id)        => '$baseUrl/sales/returns/$id';
+  static String saleReturnsBySaleUrl(int id) => '$baseUrl/sales/$id/returns';
 }

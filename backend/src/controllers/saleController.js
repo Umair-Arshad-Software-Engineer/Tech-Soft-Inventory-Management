@@ -1,7 +1,7 @@
 // backend/src/controllers/saleController.js
 const { Op, fn, col, literal } = require('sequelize');
 const sequelize = require('../config/db');
-const { Sale, SaleItem, Customer, Product, Unit, Category, CustomerLedger } = require('../models');
+const { Sale, SaleItem, Customer, Product, Unit, Category, CustomerLedger, SaleReturn, SaleReturnItem } = require('../models');
 
 // ─────────────────────────────────────────────
 //  HELPER: generate invoice number
@@ -248,7 +248,41 @@ exports.getSaleById = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Sale not found' });
     }
 
-    res.json({ success: true, data: sale });
+    // ── Fetch returns and attach (NO duplicate require) ──
+    const returns = await SaleReturn.findAll({
+      where: { sale_id: id },
+      include: [{ model: SaleReturnItem, as: 'items' }],
+      order: [['created_at', 'DESC']],
+    });
+
+    const saleData = sale.toJSON();
+    saleData.returns = returns.map(r => {
+      const ret = r.toJSON();
+      return {
+        id: ret.id,
+        return_number: ret.return_number,
+        return_date: ret.return_date,
+        return_type: ret.return_type,
+        refund_method: ret.refund_method,
+        adjustment_type: ret.adjustment_type,
+        refund_amount: ret.refund_amount,
+        reason: ret.reason,
+        notes: ret.notes,
+        status: ret.status,
+        items: (ret.items || []).map(item => ({
+          id: item.id,
+          product_name: item.product_name,
+          quantity_returned: item.quantity_returned,
+          original_unit_price: item.original_unit_price,
+          refund_unit_price: item.refund_unit_price,
+          total_refund: item.total_refund,
+          condition: item.condition,
+          reason: item.reason,
+        })),
+      };
+    });
+
+    res.json({ success: true, data: saleData });
   } catch (error) {
     console.error('Get sale by id error:', error);
     res.status(500).json({ success: false, message: 'Server error', error: error.message });
@@ -258,7 +292,6 @@ exports.getSaleById = async (req, res) => {
 // ─────────────────────────────────────────────
 //  CREATE SALE  (POS or Invoice) - UPDATED FOR CREDIT
 // ─────────────────────────────────────────────
-// In backend/src/controllers/saleController.js - update the createSale function
 exports.createSale = async (req, res) => {
   const t = await sequelize.transaction();
   try {
@@ -600,7 +633,7 @@ exports.deleteSale = async (req, res) => {
     const sale = await Sale.findByPk(id, {
       include: [{ model: SaleItem, as: 'items' }],
     });
-    
+
     if (!sale) {
       await t.rollback();
       return res.status(404).json({ success: false, message: 'Sale not found' });
@@ -616,7 +649,6 @@ exports.deleteSale = async (req, res) => {
 
     // ── Reverse ledger entries ──────────────
     if (sale.customer_id) {
-      // Create reversal entries (opposite of original)
       await createLedgerEntry({
         customerId: sale.customer_id,
         date: new Date(),
@@ -624,12 +656,11 @@ exports.deleteSale = async (req, res) => {
         referenceId: sale.id,
         referenceNumber: sale.invoice_number,
         description: `VOID: Sale ${sale.invoice_number} reversed`,
-        debit: sale.amount_paid > 0 ? 0 : sale.grand_total, // If paid, credit; if unpaid, debit
+        debit: sale.amount_paid > 0 ? 0 : sale.grand_total,
         credit: sale.amount_paid > 0 ? sale.grand_total : 0,
         transaction: t,
       });
 
-      // Update customer balance
       const finalBalance = await getCustomerBalance(sale.customer_id, t);
       await Customer.update(
         { balance: finalBalance },
@@ -637,6 +668,20 @@ exports.deleteSale = async (req, res) => {
       );
     }
 
+    // ── Delete in correct order (children first) ──
+    const saleReturns = await SaleReturn.findAll({
+      where: { sale_id: id },
+      transaction: t,
+    });
+
+    for (const ret of saleReturns) {
+      await SaleReturnItem.destroy({
+        where: { return_id: ret.id },
+        transaction: t,
+      });
+    }
+
+    await SaleReturn.destroy({ where: { sale_id: id }, transaction: t });
     await SaleItem.destroy({ where: { sale_id: id }, transaction: t });
     await sale.destroy({ transaction: t });
 
@@ -856,6 +901,151 @@ exports.getCreditSalesSummary = async (req, res) => {
     });
   } catch (error) {
     console.error('Get credit sales summary error:', error);
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+};
+
+// Add this to your saleController.js
+
+// GET RETURNS FOR A SPECIFIC SALE
+exports.getSaleReturns = async (req, res) => {
+  try {
+    const { id } = req.params; // sale_id
+    
+    const returns = await SaleReturn.findAll({
+      where: { sale_id: id },
+      include: [{ model: SaleReturnItem, as: 'items' }],
+      order: [['created_at', 'DESC']],
+    });
+
+    const formattedReturns = returns.map(ret => ({
+      id: ret.id,
+      return_number: ret.return_number,
+      return_date: ret.return_date,
+      return_type: ret.return_type,
+      refund_method: ret.refund_method,
+      adjustment_type: ret.adjustment_type,
+      refund_amount: ret.refund_amount,
+      reason: ret.reason,
+      notes: ret.notes,
+      status: ret.status,
+      items: (ret.items || []).map(item => ({
+        id: item.id,
+        product_name: item.product_name,
+        quantity_returned: item.quantity_returned,
+        original_unit_price: item.original_unit_price,
+        refund_unit_price: item.refund_unit_price,
+        total_refund: item.total_refund,
+        condition: item.condition,
+        reason: item.reason,
+      })),
+    }));
+
+    res.json({ success: true, data: formattedReturns });
+  } catch (error) {
+    console.error('Get sale returns error:', error);
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+};
+
+// ─────────────────────────────────────────────
+//  GET ALL RETURNS (with filters)
+// ─────────────────────────────────────────────
+exports.getAllReturns = async (req, res) => {
+  try {
+    const {
+      page = 1,
+      limit = 20,
+      search,
+      from_date,
+      to_date,
+      return_type,
+      refund_method,
+      status
+    } = req.query;
+
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    const offset = (pageNum - 1) * limitNum;
+
+    // Import models if not already at the top
+    const { SaleReturn, SaleReturnItem, Sale, Customer } = require('../models');
+    const { Op } = require('sequelize');
+
+    const whereClause = {};
+    if (return_type) whereClause.return_type = return_type;
+    if (refund_method) whereClause.refund_method = refund_method;
+    if (status) whereClause.status = status;
+    if (from_date || to_date) {
+      whereClause.return_date = {};
+      if (from_date) whereClause.return_date[Op.gte] = from_date;
+      if (to_date) whereClause.return_date[Op.lte] = to_date;
+    }
+
+    // Add search functionality
+    let includeClause = [
+      { 
+        model: Customer, 
+        as: 'customer', 
+        attributes: ['id', 'name', 'contact'] 
+      },
+      { 
+        model: Sale, 
+        as: 'originalSale', 
+        attributes: ['id', 'invoice_number'] 
+      }
+    ];
+
+    if (search) {
+      whereClause[Op.or] = [
+        { return_number: { [Op.like]: `%${search}%` } },
+        { '$originalSale.invoice_number$': { [Op.like]: `%${search}%` } },
+        { '$customer.name$': { [Op.like]: `%${search}%` } }
+      ];
+      
+      // Make includes required when searching
+      includeClause = includeClause.map(include => ({
+        ...include,
+        required: true
+      }));
+    }
+
+    const { count, rows: returns } = await SaleReturn.findAndCountAll({
+      where: whereClause,
+      include: includeClause,
+      order: [['created_at', 'DESC']],
+      limit: limitNum,
+      offset,
+      distinct: true
+    });
+
+    // Calculate summary
+    const summary = await SaleReturn.findOne({
+      where: whereClause,
+      include: search ? includeClause : [],
+      attributes: [
+        [require('sequelize').fn('SUM', require('sequelize').col('refund_amount')), 'total_refunds'],
+        [require('sequelize').fn('COUNT', require('sequelize').col('id')), 'total_returns']
+      ],
+      raw: true
+    });
+
+    res.json({
+      success: true,
+      data: returns,
+      pagination: {
+        total: count,
+        page: pageNum,
+        limit: limitNum,
+        pages: Math.ceil(count / limitNum)
+      },
+      summary: {
+        total_refunds: parseFloat(summary?.total_refunds) || 0,
+        total_returns: parseInt(summary?.total_returns) || 0
+      }
+    });
+  } catch (error) {
+    console.error('Get all returns error:', error);
     res.status(500).json({ success: false, message: 'Server error', error: error.message });
   }
 };

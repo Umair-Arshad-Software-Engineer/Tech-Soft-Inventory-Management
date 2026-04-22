@@ -3,6 +3,11 @@ const sequelize = require('../config/db');
 const bcrypt = require('bcryptjs');
 
 const User = sequelize.define('User', {
+  role: {
+    type: DataTypes.ENUM('super_admin', 'admin', 'worker'),
+    defaultValue: 'worker',
+    allowNull: false,
+  },
   id: {
     type: DataTypes.INTEGER,
     primaryKey: true,

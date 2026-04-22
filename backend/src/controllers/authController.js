@@ -25,6 +25,29 @@ exports.register = async (req, res) => {
   try {
     const { name, email, password } = req.body;
 
+    // Determine role based on who is calling this endpoint.
+    // req.user is set by the protect middleware (JWT).
+    // If no token is present, req.user will be undefined → reject.
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Not authorized. Only super_admin or admin can register users.'
+      });
+    }
+
+    const callerRole = req.user.role;
+
+    // Only super_admin and admin can register new users
+    if (!['super_admin', 'admin'].includes(callerRole)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden. Workers cannot register new users.'
+      });
+    }
+
+    // super_admin creates admins; admin creates workers
+    const newRole = callerRole === 'super_admin' ? 'admin' : 'worker';
+
     // Check if user exists
     const userExists = await User.findOne({ where: { email } });
     if (userExists) {
@@ -34,43 +57,30 @@ exports.register = async (req, res) => {
       });
     }
 
-    // Create user
-    const user = await User.create({
-      name,
-      email,
-      password
-    });
-
-    // Generate token
+    const user = await User.create({ name, email, password, role: newRole });
     const token = generateToken(user.id);
 
     res.status(201).json({
       success: true,
-      message: 'User registered successfully',
+      message: `${newRole.charAt(0).toUpperCase() + newRole.slice(1)} registered successfully`,
       data: {
         id: user.id,
         name: user.name,
         email: user.email,
+        role: user.role,
         token
       }
     });
 
   } catch (error) {
     console.error('Register Error:', error);
-    
-    // Handle validation errors
     if (error.name === 'SequelizeValidationError') {
-      const messages = error.errors.map(e => e.message);
       return res.status(400).json({
         success: false,
-        message: messages[0]
+        message: error.errors.map(e => e.message)[0]
       });
     }
-
-    res.status(500).json({
-      success: false,
-      message: 'Server error. Please try again.'
-    });
+    res.status(500).json({ success: false, message: 'Server error. Please try again.' });
   }
 };
 
@@ -117,6 +127,7 @@ exports.login = async (req, res) => {
         id: user.id,
         name: user.name,
         email: user.email,
+        role: user.role,   // ← add
         token
       }
     });
@@ -150,5 +161,123 @@ exports.getMe = async (req, res) => {
       success: false,
       message: 'Server error'
     });
+  }
+};
+
+
+exports.getUsers = async (req, res) => {
+  try {
+    const callerRole = req.user.role;
+ 
+    if (callerRole === 'worker') {
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden. Workers cannot access user management.',
+      });
+    }
+ 
+    let whereClause = {};
+ 
+    if (callerRole === 'admin') {
+      // Admin can only see workers
+      whereClause = { role: 'worker' };
+    } else if (callerRole === 'super_admin') {
+      // super_admin sees admins and workers (not other super_admins)
+      whereClause = {
+        role: ['admin', 'worker'],
+      };
+    }
+ 
+    const users = await User.findAll({
+      where: whereClause,
+      attributes: { exclude: ['password'] },
+      order: [['createdAt', 'DESC']],
+    });
+ 
+    res.status(200).json({
+      success: true,
+      data: users,
+    });
+  } catch (error) {
+    console.error('getUsers Error:', error);
+    res.status(500).json({ success: false, message: 'Server error.' });
+  }
+};
+ 
+
+exports.toggleUserStatus = async (req, res) => {
+  try {
+    const callerRole = req.user.role;
+    const callerId = req.user.id;
+    const { id } = req.params;
+    const { isActive } = req.body;
+ 
+    if (callerRole === 'worker') {
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden. Workers cannot change user status.',
+      });
+    }
+ 
+    if (typeof isActive !== 'boolean') {
+      return res.status(400).json({
+        success: false,
+        message: '`isActive` must be a boolean.',
+      });
+    }
+ 
+    // Prevent self-deactivation
+    if (parseInt(id) === callerId) {
+      return res.status(400).json({
+        success: false,
+        message: 'You cannot change your own status.',
+      });
+    }
+ 
+    const targetUser = await User.findByPk(id, {
+      attributes: { exclude: ['password'] },
+    });
+ 
+    if (!targetUser) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found.',
+      });
+    }
+ 
+    // Permission check
+    if (callerRole === 'admin' && targetUser.role !== 'worker') {
+      return res.status(403).json({
+        success: false,
+        message: 'Admins can only change the status of workers.',
+      });
+    }
+ 
+    if (
+      callerRole === 'super_admin' &&
+      targetUser.role === 'super_admin'
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: 'Cannot change the status of another super admin.',
+      });
+    }
+ 
+    await targetUser.update({ isActive });
+ 
+    res.status(200).json({
+      success: true,
+      message: `User ${isActive ? 'activated' : 'deactivated'} successfully.`,
+      data: {
+        id: targetUser.id,
+        name: targetUser.name,
+        email: targetUser.email,
+        role: targetUser.role,
+        isActive: targetUser.isActive,
+      },
+    });
+  } catch (error) {
+    console.error('toggleUserStatus Error:', error);
+    res.status(500).json({ success: false, message: 'Server error.' });
   }
 };

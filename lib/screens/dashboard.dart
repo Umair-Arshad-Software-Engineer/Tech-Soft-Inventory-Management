@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:tech_soft/screens/customer_screen.dart';
-import 'package:tech_soft/screens/products_list_screen.dart';
+import 'package:tech_soft/Product/products_list_screen.dart';
 import 'package:tech_soft/screens/profit_loss_dashboard_screen.dart';
-import 'package:tech_soft/screens/purchase_orders_list_screen.dart';
-import 'package:tech_soft/screens/purchase_report_screen.dart';
-import 'package:tech_soft/screens/register_screen.dart';
-import 'package:tech_soft/screens/sale_reports.dart';
-import 'package:tech_soft/screens/sale_screen.dart';
-import 'package:tech_soft/screens/sales_list_screen.dart';
-import 'package:tech_soft/screens/supplier_balance_report_screen.dart';
+import 'package:tech_soft/Supplier/supplier_balance_report_screen.dart';
+import '../Auth/register_screen.dart';
+import '../Customers/customer_balance_report_screen.dart';
+import '../Customers/customer_screen.dart';
+import '../Purchase/purchase_orders_list_screen.dart';
+import '../Purchase/purchase_report_screen.dart';
+import '../Sales/sale_reports.dart';
+import '../Sales/sales_list_screen.dart';
 import '../components/ChartCard.dart';
 import '../components/StatCard.dart';
 import '../components/custom_button.dart';
@@ -25,12 +25,13 @@ import '../providers/purchase_order_provider.dart';
 import '../providers/sale_provider.dart';
 import '../screens/CategoryScreen.dart';
 import '../screens/UnitScreen.dart';
-import 'SupplierScreen.dart';
-import 'customer_balance_report_screen.dart';
-import 'login_screen.dart';
+import '../usermanagement/user_management_screen.dart';
+import '../Product/AllReturnsScreen.dart';
+import '../Supplier/SupplierScreen.dart';
+import '../Product/damaged_stock_list_screen.dart';
+import '../Auth/login_screen.dart';
 import 'package:intl/intl.dart';
 
-// Add this enum for chart type selection
 enum SalesChartType {
   daily,
   monthly,
@@ -66,9 +67,14 @@ class _InventoryDashboardScreenState extends State<InventoryDashboardScreen> {
   String _selectedChartType = 'daily'; // 'daily', 'monthly', 'category', 'payment', 'weekday'
   bool _showComparison = false; // Show sales vs purchases comparison
 
-  bool get _isAdminUser {
+  bool get _isSuperAdmin {
     final user = Provider.of<AuthProvider>(context, listen: false).user;
-    return user?.email == 'techsoft@gmail.com';
+    return user?.role == 'super_admin';
+  }
+
+  bool get _isAdminOrAbove {
+    final user = Provider.of<AuthProvider>(context, listen: false).user;
+    return user?.role == 'super_admin' || user?.role == 'admin';
   }
 
   @override
@@ -318,6 +324,21 @@ class _InventoryDashboardScreenState extends State<InventoryDashboardScreen> {
       return const Center(child: CircularProgressIndicator());
     }
 
+    // Check access before showing page
+    if (!_hasAccessToPage(_selectedIndex)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Access Denied: ${_getPageTitle()} page is restricted'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+        setState(() => _selectedIndex = 0);
+      });
+      return _buildMainContent(authProvider);
+    }
+
     switch (_selectedIndex) {
       case 0:  return _buildMainContent(authProvider);
       case 1:  return ProductsListScreen();
@@ -331,11 +352,15 @@ class _InventoryDashboardScreenState extends State<InventoryDashboardScreen> {
       case 9:  return const CustomerBalanceReportScreen();
       case 10: return const SaleReportScreen();
       case 11: return const PurchaseReportScreen();
+      case 12: return const AllReturnsScreen();
       case 13: return const ProfitLossDashboardScreen();
-      case 99: return const RegisterScreen(); // ← add this
+      case 14: return const DamagedStockListScreen();
+      case 15: return const UserManagementScreen();
+      case 99: return const RegisterScreen();
       default: return _buildMainContent(authProvider);
     }
   }
+
 
   Widget _buildSidePanel(AuthProvider authProvider) {
     final user = authProvider.user!;
@@ -480,8 +505,23 @@ class _InventoryDashboardScreenState extends State<InventoryDashboardScreen> {
                   index: 11,
                   badge: 'NEW',
                 ),
-                // ────────────────────────────────────────────────────────
+                _buildNavItem(
+                  icon: Icons.assignment_return_outlined, // Changed icon for returns
+                  selectedIcon: Icons.assignment_return,
+                  label: 'Sales Returns',
+                  index: 12, // Using index 12 for returns
+                  badge: 'NEW',
+                ),
+                _buildNavItem(
+                  icon: Icons.warning_amber_outlined,
+                  selectedIcon: Icons.warning_amber_rounded,
+                  label: 'Damaged Stock',
+                  index: 14,
+                  badge: 'NEW',
+                ),
 
+
+                // ── SETTINGS section ────────────────────────────────────────
                 const SizedBox(height: 8),
                 if (!_isSidePanelCollapsed)
                   Padding(
@@ -490,28 +530,35 @@ class _InventoryDashboardScreenState extends State<InventoryDashboardScreen> {
                         fontWeight: FontWeight.w600, color: Colors.grey[400], letterSpacing: 1.2)),
                   ),
                 _buildNavItem(
+                  icon: Icons.people_outline,
+                  selectedIcon: Icons.people,
+                  label: 'User Management',
+                  index: 15, // Use a new index
+                  badge: _isAdminOrAbove ? 'ADMIN' : null,
+                ),
+                _buildNavItem(
                   icon: Icons.trending_up_outlined,
                   selectedIcon: Icons.trending_up,
                   label: 'Profit & Loss',
-                  index: 13, // Add new index
+                  index: 13,
                   badge: 'NEW',
                 ),
-                // ── Admin Only ───────────────────────────────────────────
-                if (_isAdminUser) ...[
-                  const SizedBox(height: 8),
-                  if (!_isSidePanelCollapsed)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 16, bottom: 8, top: 4),
-                      child: Text('ADMIN', style: TextStyle(fontSize: 11,
-                          fontWeight: FontWeight.w600, color: Colors.grey[400], letterSpacing: 1.2)),
-                    )
-                  else
-                    Padding(padding: const EdgeInsets.symmetric(vertical: 6),
-                        child: Divider(color: Colors.grey[200], height: 1)),
+                // Super admin sees "Register Admin"
+                if (_isSuperAdmin) ...[
                   _buildNavItem(
                     icon: Icons.person_add_outlined,
                     selectedIcon: Icons.person_add,
-                    label: 'Register User',
+                    label: 'Register Admin',
+                    index: 99,
+                    badge: 'SUPER',
+                  ),
+                ],
+                // Admin also sees "Register Worker"
+                if (_isAdminOrAbove && !_isSuperAdmin) ...[
+                  _buildNavItem(
+                    icon: Icons.person_add_outlined,
+                    selectedIcon: Icons.person_add,
+                    label: 'Register Worker',
                     index: 99,
                     badge: 'ADMIN',
                   ),
@@ -559,22 +606,46 @@ class _InventoryDashboardScreenState extends State<InventoryDashboardScreen> {
     );
   }
 
+  bool _hasAccessToPage(int index) {
+    final user = Provider.of<AuthProvider>(context, listen: false).user;
+    final role = user?.role;
+
+    switch (index) {
+      case 1: // Products
+      case 2: // Categories
+      case 3: // Units
+        return role == 'super_admin' || role == 'admin';
+
+      case 15: // User Management
+        return role == 'super_admin' || role == 'admin';
+
+      case 99: // Register (Admin/Super Admin)
+        return role == 'super_admin' || (role == 'admin' && !_isSuperAdmin);
+
+      default: // Dashboard, Sales, Customers, Suppliers, Reports etc.
+        return true; // All roles can access
+    }
+  }
+
   Widget _buildNavItem({
     required IconData icon,
     required IconData selectedIcon,
     required String label,
     required int index,
     String? badge,
-  })
-  {
+  }) {
     final isSelected = _selectedIndex == index;
+    final hasAccess = _hasAccessToPage(index);
+    final isDisabled = !hasAccess;
 
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 2),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: () => setState(() => _selectedIndex = index),
+          onTap: isDisabled
+              ? null
+              : () => setState(() => _selectedIndex = index),
           borderRadius: BorderRadius.circular(12),
           child: Container(
             padding: EdgeInsets.symmetric(
@@ -588,14 +659,25 @@ class _InventoryDashboardScreenState extends State<InventoryDashboardScreen> {
                   ? MainAxisAlignment.center : MainAxisAlignment.start,
               children: [
                 Icon(isSelected ? selectedIcon : icon,
-                    color: isSelected ? const Color(0xFF7C3AED) : const Color(0xFF6B7280),
+                    color: isDisabled
+                        ? Colors.grey[400]
+                        : (isSelected ? const Color(0xFF7C3AED) : const Color(0xFF6B7280)),
                     size: 22),
                 if (!_isSidePanelCollapsed) ...[
                   const SizedBox(width: 12),
-                  Expanded(child: Text(label, style: TextStyle(fontSize: 14,
-                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                      color: isSelected ? const Color(0xFF7C3AED) : const Color(0xFF6B7280),
-                      letterSpacing: 0.2))),
+                  Expanded(
+                    child: Text(
+                      label,
+                      style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                          color: isDisabled
+                              ? Colors.grey[400]
+                              : (isSelected ? const Color(0xFF7C3AED) : const Color(0xFF6B7280)),
+                          letterSpacing: 0.2
+                      ),
+                    ),
+                  ),
                   if (badge != null)
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
@@ -604,8 +686,19 @@ class _InventoryDashboardScreenState extends State<InventoryDashboardScreen> {
                             colors: [Color(0xFF7C3AED), Color(0xFF6366F1)]),
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Text(badge, style: const TextStyle(fontSize: 9,
-                          fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 0.3)),
+                      child: Text(badge,
+                        style: const TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                            letterSpacing: 0.3
+                        ),
+                      ),
+                    ),
+                  if (isDisabled)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 8),
+                      child: Icon(Icons.lock_outline, size: 12, color: Colors.grey[400]),
                     ),
                 ],
               ],
@@ -1546,7 +1639,10 @@ class _InventoryDashboardScreenState extends State<InventoryDashboardScreen> {
       case 9:  return 'Customer Balance Report';
       case 10: return 'Sale Report';
       case 11: return 'Purchase Report';
+      case 12: return 'Sales Returns'; // ADD THIS CASE
       case 13: return 'Profit & Loss Dashboard';
+      case 14: return 'Damaged Stock';
+      case 15: return 'User Management';
       case 99: return 'Register New User';
       default: return 'Dashboard';
     }
@@ -1566,7 +1662,10 @@ class _InventoryDashboardScreenState extends State<InventoryDashboardScreen> {
       case 9:  return 'Outstanding balances and payment status for all customers';
       case 10: return 'Sales analytics and performance overview';
       case 11: return 'Purchase analytics and procurement overview';
+      case 12: return 'Track and manage all product returns from sales'; // ADD THIS CASE
       case 13: return 'Track your profits, losses, and savings from sales and purchases';
+      case 14: return 'Track and manage damaged inventory items';
+      case 15: return 'Manage user accounts and permissions';
       case 99: return 'Create a new user account';
       default: return '';
     }
@@ -1598,3 +1697,4 @@ class _InventoryDashboardScreenState extends State<InventoryDashboardScreen> {
     }
   }
 }
+

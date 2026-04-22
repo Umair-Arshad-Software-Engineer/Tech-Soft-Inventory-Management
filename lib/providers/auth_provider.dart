@@ -32,7 +32,7 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  // Register - UPDATED: Don't auto-login
+// Register - FIXED: Keep current session alive
   Future<Map<String, dynamic>> register({
     required String name,
     required String email,
@@ -47,14 +47,8 @@ class AuthProvider with ChangeNotifier {
       password: password,
     );
 
-    // ⚠️ DON'T auto-login after registration
-    // User must login with their credentials
-    if (result['success']) {
-      // Clear any existing login session
-      await _authService.logout();
-      _user = null;
-      _isLoggedIn = false;
-    }
+    // ✅ DO NOT logout — the super_admin/admin stays logged in
+    // The newly created user has no session until they login themselves
 
     _isLoading = false;
     notifyListeners();

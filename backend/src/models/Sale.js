@@ -99,6 +99,16 @@ module.exports = (sequelize) => {
         model: 'users',
         key: 'id'
       }
+    },
+    return_status: {
+      type: DataTypes.ENUM('none', 'partial_return', 'fully_returned'),
+      allowNull: false,
+      defaultValue: 'none'
+    },
+    return_amount: {
+      type: DataTypes.DECIMAL(12, 2),
+      allowNull: false,
+      defaultValue: 0.00
     }
   }, {
     tableName: 'sales',

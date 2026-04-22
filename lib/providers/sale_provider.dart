@@ -298,4 +298,34 @@ class SaleProvider with ChangeNotifier {
     }
   }
 
+
+// Add this method to your SaleProvider class in sale_provider.dart
+
+// Get returns for a specific sale
+  Future<List<dynamic>> getSaleReturns(int saleId) async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.get(
+        Uri.parse('${ApiConfig.salesUrl}/$saleId/returns'),
+        headers: headers,
+      );
+
+      debugPrint('Returns response status: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        final json = jsonDecode(response.body);
+        debugPrint('Returns response: $json');
+
+        if (json['success'] == true) {
+          final returns = json['data'] as List? ?? [];
+          debugPrint('Found ${returns.length} returns');
+          return returns;
+        }
+      }
+      return [];
+    } catch (e) {
+      debugPrint('Error fetching returns: $e');
+      return [];
+    }
+  }
 }

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:tech_soft/providers/CustomerPriceProvider.dart';
 import 'package:tech_soft/providers/customer_ledger_provider.dart';
 import 'package:tech_soft/providers/customer_provider.dart';
+import 'package:tech_soft/providers/damaged_stock_provider.dart';
 import 'package:tech_soft/providers/product_image_provider.dart';
 import 'package:tech_soft/providers/product_provider.dart';
 import 'package:tech_soft/providers/purchase_order_provider.dart';
@@ -14,12 +15,12 @@ import 'package:tech_soft/providers/supplier_ledger_provider.dart';
 import 'package:tech_soft/providers/supplier_provider.dart';
 import 'package:tech_soft/providers/unit_provider.dart';
 import 'package:tech_soft/screens/CategoryScreen.dart';
-import 'package:tech_soft/screens/SupplierScreen.dart';
+import 'package:tech_soft/Supplier/SupplierScreen.dart';
 import 'package:tech_soft/screens/UnitScreen.dart';
-import 'package:tech_soft/screens/customer_screen.dart';
 import 'package:tech_soft/screens/dashboard.dart';
-import 'screens/login_screen.dart';
-import 'screens/register_screen.dart';
+import 'Auth/register_screen.dart';
+import 'Customers/customer_screen.dart';
+import 'Auth/login_screen.dart';
 import 'providers/auth_provider.dart';
 import 'providers/category_provider.dart';
 import 'dart:io';
@@ -70,6 +71,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => SupplierLedgerProvider()),
         ChangeNotifierProvider(create: (_) => SaleProvider()),
         ChangeNotifierProvider(create: (_) => CustomerLedgerProvider()),
+        ChangeNotifierProvider(create: (_) => DamagedStockProvider()),
       ],
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
@@ -133,8 +135,8 @@ class MyApp extends StatelessWidget {
           '/login': (context) => const LoginScreen(),
           '/register': (context) => const RegisterScreen(),
           '/home': (context) => const InventoryDashboardScreen(),
-          '/categories': (context) => const CategoryScreen(), // Add category route
-          '/units': (context) => const UnitScreen(), // Add this
+          '/categories': (context) => const CategoryScreen(),
+          '/units': (context) => const UnitScreen(),
           '/supplier': (context)=> const SupplierScreen(),
           '/customer': (context)=> const CustomerScreen(),
 

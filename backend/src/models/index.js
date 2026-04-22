@@ -19,7 +19,10 @@ const initPurchaseReceiptItem = require('./PurchaseReceiptItem');
 const initSupplierLedger = require('./SupplierLedger');
 const initSale = require('./Sale');
 const initSaleItem = require('./SaleItem');
-const initCustomerLedger = require('./CustomerLedger');  // ADD THIS
+const initCustomerLedger = require('./CustomerLedger');
+const initDamagedStock = require('./DamagedStock');  // ADD THIS
+const SaleReturnModel = require('./SaleReturn');
+const SaleReturnItemModel = require('./SaleReturnItem');
 
 // Initialize models
 const Category = initCategory(sequelize);
@@ -37,7 +40,10 @@ const PurchaseReceiptItem = initPurchaseReceiptItem(sequelize);
 const SupplierLedger = initSupplierLedger(sequelize);
 const Sale = initSale(sequelize);
 const SaleItem = initSaleItem(sequelize);
-const CustomerLedger = initCustomerLedger(sequelize);  // ADD THIS
+const CustomerLedger = initCustomerLedger(sequelize);
+const DamagedStock = initDamagedStock(sequelize);  // ADD THIS
+const SaleReturn = SaleReturnModel(sequelize);
+const SaleReturnItem = SaleReturnItemModel(sequelize);
 
 // Define associations
 Category.hasMany(Subcategory, {
@@ -74,6 +80,18 @@ Product.belongsTo(Unit, {
 Product.hasMany(CustomerPrice, {
   foreignKey: 'product_id',
   as: 'customerPrices'
+});
+
+// Damaged Stock associations - ADD THIS SECTION
+Product.hasMany(DamagedStock, {
+  foreignKey: 'product_id',
+  as: 'damagedStock',
+  onDelete: 'CASCADE'
+});
+
+DamagedStock.belongsTo(Product, {
+  foreignKey: 'product_id',
+  as: 'product'
 });
 
 // Product Image associations
@@ -239,6 +257,18 @@ Customer.hasMany(Sale, {
   as: 'sales'
 });
 
+Sale.hasMany(SaleReturn, { foreignKey: 'sale_id', as: 'returns' });
+SaleReturn.belongsTo(Sale, { foreignKey: 'sale_id', as: 'originalSale' });
+
+SaleReturn.belongsTo(Customer, { foreignKey: 'customer_id', as: 'customer' });
+Customer.hasMany(SaleReturn, { foreignKey: 'customer_id', as: 'returns' });
+
+SaleReturn.hasMany(SaleReturnItem, { foreignKey: 'return_id', as: 'items' });
+SaleReturnItem.belongsTo(SaleReturn, { foreignKey: 'return_id', as: 'return' });
+
+SaleReturnItem.belongsTo(Product, { foreignKey: 'product_id', as: 'product' });
+Product.hasMany(SaleReturnItem, { foreignKey: 'product_id', as: 'returns' });
+
 const models = {
   User,
   Category,
@@ -257,6 +287,9 @@ const models = {
   Sale,
   SaleItem,
   CustomerLedger,
+  DamagedStock, 
+  SaleReturn,
+  SaleReturnItem,
   sequelize
 };
 
