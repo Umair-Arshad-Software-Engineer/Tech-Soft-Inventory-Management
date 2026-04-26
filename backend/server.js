@@ -38,6 +38,28 @@ const saleReturnRoutes = require('./src/routes/saleReturnRoutes');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// For network discovery (optional)
+
+const dgram = require('dgram');
+const os = require('os');
+
+const DISCOVERY_PORT = 41234;
+
+// Get local IP
+function getLocalIP() {
+  const interfaces = os.networkInterfaces();
+  for (let name of Object.keys(interfaces)) {
+    for (let iface of interfaces[name]) {
+      if (iface.family === 'IPv4' && !iface.internal) {
+        return iface.address;
+      }
+    }
+  }
+  return 'localhost';
+}
+
+const serverIP = getLocalIP();
+
 // ─── Admin Seed Config ────────────────────────────────────────────────────────
 const ADMIN_USER = {
   name: 'Tech Soft',
@@ -147,6 +169,35 @@ async function seedAdminUser() {
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─── UDP DISCOVERY SERVER ─────────────────────────────
+const udpServer = dgram.createSocket('udp4');
+
+udpServer.on('message', (msg, rinfo) => {
+  const message = msg.toString();
+
+  if (message === 'DISCOVER_SERVER') {
+    console.log(`📡 Discovery request from ${rinfo.address}`);
+
+    const response = JSON.stringify({
+      ip: serverIP,
+      port: PORT
+    });
+
+    udpServer.send(
+      response,
+      0,
+      response.length,
+      rinfo.port,
+      rinfo.address
+    );
+  }
+});
+
+udpServer.bind(DISCOVERY_PORT, () => {
+  console.log(`📡 UDP Discovery listening on ${DISCOVERY_PORT}`);
+});
+
+
 // Database sync and server start
 (async () => {
   try {
@@ -177,7 +228,8 @@ async function seedAdminUser() {
     // });
     app.listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 Server running on port ${PORT}`);
-      console.log(`🌐 Access from network: http://192.168.10.38:${PORT}`);
+      // console.log(`🌐 Access from network: http://192.168.10.38:${PORT}`);
+      console.log(`🌐 Access from network: http://${serverIP}:${PORT}`);
     });
   } catch (err) {
     console.error('❌ Database error:', err);

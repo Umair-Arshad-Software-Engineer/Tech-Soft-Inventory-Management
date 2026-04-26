@@ -21,32 +21,37 @@ import 'package:tech_soft/screens/dashboard.dart';
 import 'Auth/register_screen.dart';
 import 'Customers/customer_screen.dart';
 import 'Auth/login_screen.dart';
+import 'config/api_config.dart';
 import 'providers/auth_provider.dart';
 import 'providers/category_provider.dart';
 import 'dart:io';
 
 
-Future<void> startServer() async {
-  try {
-    await Process.start(
-      'Tech-Soft-Server.exe',
-      [],
-      runInShell: true,
-    );
-  } catch (e) {
-    print("Server start failed: $e");
-  }
-}
-// void main() {
-//   runApp(const MyApp());
+// Future<void> startServer() async {
+//   try {
+//     await Process.start(
+//       'server.exe',
+//       [],
+//       runInShell: true,
+//     );
+//   } catch (e) {
+//     print("Server start failed: $e");
+//   }
 // }
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await startServer(); // start Node.js server
+  // // 1️⃣ Start backend server
+  // await startServer();
 
-  await Future.delayed(const Duration(seconds: 2)); // wait for server
+  // 2️⃣ Give server time to boot
+  await Future.delayed(const Duration(seconds: 2));
 
+  // 3️⃣ Initialize API (AUTO DISCOVERY)
+  await ApiConfig.init();
+
+  // 4️⃣ Run app
   runApp(const MyApp());
 }
 

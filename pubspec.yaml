@@ -51,6 +51,7 @@ dependencies:
   open_file: any
   share_plus: any
   permission_handler: any
+  udp: any
 
   
 
