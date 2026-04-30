@@ -172,14 +172,39 @@ async function seedAdminUser() {
 // ─── UDP DISCOVERY SERVER ─────────────────────────────
 const udpServer = dgram.createSocket('udp4');
 
+// udpServer.on('message', (msg, rinfo) => {
+//   const message = msg.toString();
+
+//   if (message === 'DISCOVER_SERVER') {
+//     console.log(`📡 Discovery request from ${rinfo.address}`);
+
+//     const response = JSON.stringify({
+//       ip: serverIP,
+//       port: PORT
+//     });
+
+//     udpServer.send(
+//       response,
+//       0,
+//       response.length,
+//       rinfo.port,
+//       rinfo.address
+//     );
+//   }
+// });
 udpServer.on('message', (msg, rinfo) => {
   const message = msg.toString();
 
   if (message === 'DISCOVER_SERVER') {
     console.log(`📡 Discovery request from ${rinfo.address}`);
 
+    // ✅ Detect if request is from same machine
+    const isLocalhost =
+      rinfo.address === '127.0.0.1' ||
+      rinfo.address === '::1';
+
     const response = JSON.stringify({
-      ip: serverIP,
+      ip: isLocalhost ? '127.0.0.1' : serverIP,
       port: PORT
     });
 
