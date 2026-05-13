@@ -15,7 +15,7 @@
     ]
   },
   "scripts": {
-    "start": "node server.js",
+    "start": "nodemon server.js",
     "dev": "nodemon server.js",
     "build": "pkg . --output tech-soft"
   },

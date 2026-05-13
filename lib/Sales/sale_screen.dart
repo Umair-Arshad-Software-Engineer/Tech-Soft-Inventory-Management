@@ -40,6 +40,59 @@ class SaleItem {
       customerSpecificPrice != null && customerSpecificPrice != standardPrice;
 }
 
+// Quantity Input Widget - Reusable component
+class QuantityInput extends StatelessWidget {
+  final int quantity;
+  final Function(int) onChanged;
+  final double width;
+
+  const QuantityInput({
+    super.key,
+    required this.quantity,
+    required this.onChanged,
+    this.width = 70,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: width,
+      child: TextFormField(
+        initialValue: quantity.toString(),
+        keyboardType: TextInputType.number,
+        textAlign: TextAlign.center,
+        decoration: InputDecoration(
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(6),
+            borderSide: const BorderSide(color: Color(0xFFD1D5DB)),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(6),
+            borderSide: const BorderSide(color: Color(0xFFD1D5DB)),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(6),
+            borderSide: const BorderSide(color: Color(0xFF7C3AED), width: 1.5),
+          ),
+        ),
+        style: const TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w500,
+        ),
+        onChanged: (value) {
+          if (value.isEmpty) return;
+          final newQty = int.tryParse(value);
+          if (newQty != null && newQty >= 1 && newQty <= 9999) {
+            onChanged(newQty);
+          }
+        },
+      ),
+    );
+  }
+}
+
 // ─────────────────────────────────────────────
 //  MAIN SCREEN
 // ─────────────────────────────────────────────
@@ -85,14 +138,29 @@ class _SaleScreenState extends State<SaleScreen>
   // Controls the bottom options panel expansion in POS mode
   bool _showOptionsPanel = false;
 
+  // ── FIX: Persistent discount controllers ──────────────────────
+  // These live for the lifetime of the screen, so typing is never interrupted.
+  late final TextEditingController _discountPercentCtrl;
+  late final TextEditingController _discountAmountCtrl;
+  // Track whether the controllers are being updated programmatically
+  // so we don't trigger an onChange → setState → rebuild loop.
+  bool _updatingDiscountCtrl = false;
+  // ──────────────────────────────────────────────────────────────
+
   @override
   void initState() {
     super.initState();
     _toggleAnim = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 280));
     _searchController.addListener(_onSearchChanged);
-    _loadAllProducts(); // ← add this
 
+    // Initialise persistent discount controllers with the starting values.
+    _discountPercentCtrl =
+        TextEditingController(text: _discountPercent.toStringAsFixed(1));
+    _discountAmountCtrl =
+        TextEditingController(text: _discountAmount.toStringAsFixed(2));
+
+    _loadAllProducts();
   }
 
   @override
@@ -101,6 +169,8 @@ class _SaleScreenState extends State<SaleScreen>
     _searchController.dispose();
     _searchFocus.dispose();
     _invoiceNoteController.dispose();
+    _discountPercentCtrl.dispose();
+    _discountAmountCtrl.dispose();
     super.dispose();
   }
 
@@ -121,6 +191,20 @@ class _SaleScreenState extends State<SaleScreen>
       .where((i) => i.usingCustomerPrice && i.hasPriceDifference)
       .fold(0.0,
           (sum, i) => sum + ((i.standardPrice - i.unitPrice) * i.quantity));
+
+  // ─────────────────────────────────────────────
+  //  DISCOUNT CONTROLLER HELPERS
+  // ─────────────────────────────────────────────
+
+  /// Call whenever the discount values are changed programmatically
+  /// (e.g. applying customer discount, clearing cart) so the text
+  /// fields stay in sync without triggering the onChange callbacks.
+  void _syncDiscountControllers() {
+    _updatingDiscountCtrl = true;
+    _discountPercentCtrl.text = _discountPercent.toStringAsFixed(1);
+    _discountAmountCtrl.text = _discountAmount.toStringAsFixed(2);
+    _updatingDiscountCtrl = false;
+  }
 
   // ─────────────────────────────────────────────
   //  CUSTOMER PRICE LOGIC
@@ -218,13 +302,10 @@ class _SaleScreenState extends State<SaleScreen>
     setState(() => _isLoadingProducts = true);
     try {
       final provider = Provider.of<ProductProvider>(context, listen: false);
-
-      // Try fetching all products — adjust method name to match your provider
-      // Option 1: if you have a fetchProducts/getProducts method
-      await provider.fetchProducts(); // or provider.loadProducts()
+      await provider.fetchProducts();
       if (mounted) {
         setState(() {
-          _allProducts = provider.products; // adjust to your provider's list field
+          _allProducts = provider.products;
         });
       }
     } catch (_) {}
@@ -277,13 +358,6 @@ class _SaleScreenState extends State<SaleScreen>
 
   void _removeFromCart(int index) => setState(() => _cartItems.removeAt(index));
 
-  void _updateQty(int index, int delta) {
-    setState(() {
-      _cartItems[index].quantity =
-          (_cartItems[index].quantity + delta).clamp(1, 9999);
-    });
-  }
-
   void _clearCart() {
     setState(() {
       _cartItems.clear();
@@ -294,6 +368,8 @@ class _SaleScreenState extends State<SaleScreen>
       _customerPriceMap = {};
       _showOptionsPanel = false;
     });
+    // Keep controllers in sync after programmatic reset.
+    _syncDiscountControllers();
   }
 
   void _switchMode(bool pos) {
@@ -462,7 +538,6 @@ class _SaleScreenState extends State<SaleScreen>
                 const SizedBox(height: 16),
                 _buildInvoiceItemsTable(),
                 const SizedBox(height: 16),
-                // ── Discount & customer prices inline in invoice left panel ──
                 _buildInvoiceOptionsCard(),
                 const SizedBox(height: 16),
                 _buildInvoiceNotes(),
@@ -488,7 +563,6 @@ class _SaleScreenState extends State<SaleScreen>
   // ─────────────────────────────────────────────
 
   Widget _buildLeftOptionsPanel() {
-    // Only show if a customer is selected (prices / discount are meaningful)
     final hasCustomer = _selectedCustomer != null;
     final hasCustomerDiscount =
         hasCustomer && _selectedCustomer!.discountPercent > 0;
@@ -496,7 +570,6 @@ class _SaleScreenState extends State<SaleScreen>
         _usePercentDiscount &&
         _discountPercent == _selectedCustomer!.discountPercent;
 
-    // Active badge count for the toggle button
     int activeOptions = 0;
     if (_useCustomerPrices && _customerPriceMap.isNotEmpty) activeOptions++;
     if (_discountValue > 0) activeOptions++;
@@ -543,7 +616,6 @@ class _SaleScreenState extends State<SaleScreen>
                           fontWeight: FontWeight.w600,
                           color: Color(0xFF374151))),
                   const SizedBox(width: 8),
-                  // Active indicators
                   if (activeOptions > 0)
                     Container(
                       padding: const EdgeInsets.symmetric(
@@ -591,11 +663,9 @@ class _SaleScreenState extends State<SaleScreen>
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Left col: Discount
                   Expanded(child: _buildCompactDiscountSection(
                       usingCustomerDiscount, hasCustomerDiscount)),
                   const SizedBox(width: 12),
-                  // Right col: Customer prices (only when customer selected)
                   if (hasCustomer)
                     Expanded(child: _buildCompactCustomerPriceToggle()),
                 ],
@@ -611,7 +681,10 @@ class _SaleScreenState extends State<SaleScreen>
     );
   }
 
-  /// Compact discount widget for the left options panel
+  // ─────────────────────────────────────────────
+  //  COMPACT DISCOUNT SECTION  ← FIXED
+  // ─────────────────────────────────────────────
+
   Widget _buildCompactDiscountSection(
       bool usingCustomerDiscount, bool hasCustomerDiscount) {
     return Column(
@@ -626,8 +699,12 @@ class _SaleScreenState extends State<SaleScreen>
                     color: Color(0xFF374151))),
             const Spacer(),
             GestureDetector(
-              onTap: () =>
-                  setState(() => _usePercentDiscount = !_usePercentDiscount),
+              onTap: () {
+                setState(() => _usePercentDiscount = !_usePercentDiscount);
+                // Sync the active controller text after the mode switch so the
+                // field shows the right value immediately without a rebuild loop.
+                _syncDiscountControllers();
+              },
               child: Container(
                 padding:
                 const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
@@ -646,18 +723,20 @@ class _SaleScreenState extends State<SaleScreen>
           ],
         ),
         const SizedBox(height: 6),
+
+        // ── FIX: use persistent controllers, no ValueKey rebuild ──
         SizedBox(
           height: 36,
           child: TextField(
-            key: ValueKey('discount_${_usePercentDiscount}'),
-            controller: TextEditingController(
-                text: _usePercentDiscount
-                    ? _discountPercent.toStringAsFixed(1)
-                    : _discountAmount.toStringAsFixed(2)),
+            // Use the controller matching the current mode.
+            // Do NOT assign a new controller here; use the persistent one.
+            controller: _usePercentDiscount
+                ? _discountPercentCtrl
+                : _discountAmountCtrl,
             keyboardType:
             const TextInputType.numberWithOptions(decimal: true),
             decoration: InputDecoration(
-              hintText: _usePercentDiscount ? '0.00 %' : '0.00 Rs',
+              hintText: _usePercentDiscount ? '0.0 %' : '0.00 Rs',
               hintStyle: const TextStyle(fontSize: 12),
               isDense: true,
               contentPadding:
@@ -673,17 +752,20 @@ class _SaleScreenState extends State<SaleScreen>
                   : null,
             ),
             onChanged: (v) {
+              if (_updatingDiscountCtrl) return;
               final parsed = double.tryParse(v) ?? 0.0;
               setState(() {
                 if (_usePercentDiscount) {
                   _discountPercent = parsed.clamp(0, 100);
                 } else {
-                  _discountAmount = parsed.clamp(0, _subtotal);
+                  _discountAmount = parsed.clamp(0, _subtotal > 0 ? _subtotal : double.infinity);
                 }
               });
             },
           ),
         ),
+        // ──────────────────────────────────────────────────────────
+
         if (hasCustomerDiscount) ...[
           const SizedBox(height: 8),
           _buildCustomerDiscountCheckbox(usingCustomerDiscount),
@@ -860,7 +942,7 @@ class _SaleScreenState extends State<SaleScreen>
     if (_selectedCategory == null) return [];
     final subs = _allProducts
         .where((p) => (p.category?.name ?? 'Uncategorized') == _selectedCategory)
-        .map((p) => p.subcategory?.name ?? '')   // ← subcategory (lowercase)
+        .map((p) => p.subcategory?.name ?? '')
         .where((s) => s.isNotEmpty)
         .toSet()
         .toList()
@@ -871,7 +953,7 @@ class _SaleScreenState extends State<SaleScreen>
   List<ProductModel> get _filteredBrowseProducts {
     return _allProducts.where((p) {
       final cat = p.category?.name ?? 'Uncategorized';
-      final sub = p.subcategory?.name ?? '';   // ← subcategory (lowercase)
+      final sub = p.subcategory?.name ?? '';
       if (_selectedCategory != null && cat != _selectedCategory) return false;
       if (_selectedSubcategory != null && sub != _selectedSubcategory) return false;
       return true;
@@ -886,7 +968,6 @@ class _SaleScreenState extends State<SaleScreen>
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
         children: [
-          // "All" chip
           _filterChip(
             label: 'All',
             icon: Icons.grid_view_rounded,
@@ -1015,12 +1096,9 @@ class _SaleScreenState extends State<SaleScreen>
             ],
           ),
         ),
-        // Category chips
         _buildCategoryChips(),
-        // Subcategory chips (shown only when category selected)
         if (_selectedCategory != null) _buildSubcategoryChips(),
         const Divider(height: 1, color: Color(0xFFEEEEF5)),
-        // Product grid / list
         Expanded(
           child: _searchController.text.isNotEmpty
               ? (_searchResults.isEmpty && !_isSearching
@@ -1264,10 +1342,7 @@ class _SaleScreenState extends State<SaleScreen>
     ),
   );
 
-
-
   // ── BROWSE PRODUCT LIST ───────────────────────
-
   Widget _buildBrowseProductList() {
     if (_isLoadingProducts) {
       return const Center(child: CircularProgressIndicator());
@@ -1295,7 +1370,7 @@ class _SaleScreenState extends State<SaleScreen>
     final displayPrice = _resolvePrice(product);
     final isLowStock = product.physicalQty <= product.minStock;
     final catName = product.category?.name ?? '';
-    final subName = product.subcategory?.name ?? '';   // ← subcategory (lowercase)
+    final subName = product.subcategory?.name ?? '';
 
     return GestureDetector(
       onTap: () => _addToCart(product),
@@ -1321,7 +1396,6 @@ class _SaleScreenState extends State<SaleScreen>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Product icon area
             Container(
               height: 72,
               width: double.infinity,
@@ -1373,7 +1447,6 @@ class _SaleScreenState extends State<SaleScreen>
                 ],
               ),
             ),
-            // Info area
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.all(8),
@@ -1390,7 +1463,6 @@ class _SaleScreenState extends State<SaleScreen>
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 4),
-                    // Category + Subcategory chips
                     Wrap(
                       spacing: 4,
                       runSpacing: 3,
@@ -1406,7 +1478,6 @@ class _SaleScreenState extends State<SaleScreen>
                       ],
                     ),
                     const Spacer(),
-                    // Price row
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
@@ -1435,7 +1506,6 @@ class _SaleScreenState extends State<SaleScreen>
                             ],
                           ),
                         ),
-                        // Qty in cart badge
                         if (inCart)
                           Container(
                             padding: const EdgeInsets.symmetric(
@@ -1484,7 +1554,6 @@ class _SaleScreenState extends State<SaleScreen>
       children: [
         _buildCustomerSection(),
         const Divider(height: 1, color: Color(0xFFEEEEF5)),
-        // Cart list now fills all available space
         Expanded(
           child: _cartItems.isEmpty
               ? _buildEmptyCart()
@@ -1499,8 +1568,6 @@ class _SaleScreenState extends State<SaleScreen>
       ],
     );
   }
-
-  // ── CUSTOMER SECTION (right panel – no pricing checkbox here) ──
 
   Widget _buildCustomerSection() {
     return Padding(
@@ -1564,6 +1631,7 @@ class _SaleScreenState extends State<SaleScreen>
                               _discountAmount = 0;
                               _discountPercent = 0;
                               _showOptionsPanel = false;
+                              _syncDiscountControllers();
                               for (final item in _cartItems) {
                                 item.usingCustomerPrice = false;
                                 item.customerSpecificPrice = null;
@@ -1615,7 +1683,6 @@ class _SaleScreenState extends State<SaleScreen>
             ),
           ],
 
-          // Hint to open options panel when customer is selected
           if (_selectedCustomer != null) ...[
             const SizedBox(height: 8),
             GestureDetector(
@@ -1623,7 +1690,6 @@ class _SaleScreenState extends State<SaleScreen>
                   setState(() => _showOptionsPanel = !_showOptionsPanel),
               child: Row(
                 children: [
-                  // Customer discount badge (if any)
                   if (_selectedCustomer!.discountPercent > 0)
                     _chip(
                         '${_selectedCustomer!.discountPercent.toStringAsFixed(1)}% discount',
@@ -1658,8 +1724,6 @@ class _SaleScreenState extends State<SaleScreen>
       ),
     );
   }
-
-  // ── CART ITEM ─────────────────────────────────
 
   Widget _buildCartItem(int index) {
     final item = _cartItems[index];
@@ -1795,19 +1859,14 @@ class _SaleScreenState extends State<SaleScreen>
               ),
               const SizedBox(width: 8),
               const Spacer(),
-              Row(
-                children: [
-                  _qtyBtn(Icons.remove, () => _updateQty(index, -1)),
-                  Container(
-                    width: 36,
-                    alignment: Alignment.center,
-                    child: Text(item.quantity.toString(),
-                        style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14)),
-                  ),
-                  _qtyBtn(Icons.add, () => _updateQty(index, 1)),
-                ],
+              QuantityInput(
+                quantity: item.quantity,
+                width: 70,
+                onChanged: (newQty) {
+                  setState(() {
+                    _cartItems[index].quantity = newQty;
+                  });
+                },
               ),
               const SizedBox(width: 8),
               SizedBox(
@@ -1830,18 +1889,6 @@ class _SaleScreenState extends State<SaleScreen>
     );
   }
 
-  Widget _qtyBtn(IconData icon, VoidCallback onTap) => GestureDetector(
-    onTap: onTap,
-    child: Container(
-      width: 26,
-      height: 26,
-      decoration: BoxDecoration(
-          color: const Color(0xFFF3F0FF),
-          borderRadius: BorderRadius.circular(6)),
-      child:
-      Icon(icon, size: 14, color: const Color(0xFF7C3AED)),
-    ),
-  );
 
   Widget _buildEmptyCart() => const Center(
     child: Column(
@@ -1894,6 +1941,7 @@ class _SaleScreenState extends State<SaleScreen>
                     _discountPercent = 0;
                     _discountAmount = 0;
                   });
+                  _syncDiscountControllers();
                 }
               },
               activeColor: const Color(0xFF10B981),
@@ -1946,52 +1994,21 @@ class _SaleScreenState extends State<SaleScreen>
     setState(() {
       _usePercentDiscount = true;
       _discountPercent = _selectedCustomer!.discountPercent;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Applied ${_selectedCustomer!.discountPercent.toStringAsFixed(1)}% discount for ${_selectedCustomer!.name}',
-          ),
-          backgroundColor: const Color(0xFF10B981),
-          duration: const Duration(seconds: 2),
-        ),
-      );
     });
+    // Sync controller text after setting the value programmatically.
+    _syncDiscountControllers();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Applied ${_selectedCustomer!.discountPercent.toStringAsFixed(1)}% discount for ${_selectedCustomer!.name}',
+        ),
+        backgroundColor: const Color(0xFF10B981),
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   // ── SUMMARY + ACTION BUTTONS ──────────────────
-
-  // Widget _buildPrintOption({
-  //   required IconData icon,
-  //   required String label,
-  //   required Color color,
-  //   required VoidCallback onTap,
-  // }) {
-  //   return GestureDetector(
-  //     onTap: onTap,
-  //     child: Container(
-  //       padding: const EdgeInsets.symmetric(vertical: 16),
-  //       decoration: BoxDecoration(
-  //         color: color.withOpacity(0.1),
-  //         borderRadius: BorderRadius.circular(12),
-  //         border: Border.all(color: color.withOpacity(0.3)),
-  //       ),
-  //       child: Column(
-  //         children: [
-  //           Icon(icon, color: color, size: 28),
-  //           const SizedBox(height: 8),
-  //           Text(
-  //             label,
-  //             style: TextStyle(
-  //               color: color,
-  //               fontWeight: FontWeight.w600,
-  //               fontSize: 14,
-  //             ),
-  //           ),
-  //         ],
-  //       ),
-  //     ),
-  //   );
-  // }
 
   void _showPrintOptionsSheet(Uint8List pdfData) {
     showModalBottomSheet(
@@ -2004,7 +2021,6 @@ class _SaleScreenState extends State<SaleScreen>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Handle bar
             Container(
               width: 40,
               height: 4,
@@ -2014,8 +2030,6 @@ class _SaleScreenState extends State<SaleScreen>
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
-
-            // Title
             const Text(
               'Print Options',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -2026,8 +2040,6 @@ class _SaleScreenState extends State<SaleScreen>
               style: TextStyle(fontSize: 14, color: Colors.grey[600]),
             ),
             const SizedBox(height: 20),
-
-            // Action buttons
             Row(
               children: [
                 Expanded(
@@ -2071,8 +2083,6 @@ class _SaleScreenState extends State<SaleScreen>
               ),
             ),
             const SizedBox(height: 16),
-
-            // Cancel button
             TextButton(
               onPressed: () => Navigator.pop(ctx),
               child: const Text('Cancel'),
@@ -2132,7 +2142,6 @@ class _SaleScreenState extends State<SaleScreen>
     }).toList();
 
     try {
-      // Show loading indicator
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -2141,7 +2150,6 @@ class _SaleScreenState extends State<SaleScreen>
         ),
       );
 
-      // Generate PDF preview
       final pdfData = await SalePdfGenerator.generateSalePdf(
         saleData: {'invoice_number': 'PREVIEW-${DateTime.now().millisecondsSinceEpoch}'},
         customer: _selectedCustomer,
@@ -2156,12 +2164,10 @@ class _SaleScreenState extends State<SaleScreen>
         notes: _invoiceNoteController.text,
       );
 
-      if (mounted) Navigator.pop(context); // Close loading dialog
-
-      // Show print options bottom sheet
+      if (mounted) Navigator.pop(context);
       _showPrintOptionsSheet(pdfData);
     } catch (e) {
-      if (mounted) Navigator.pop(context); // Close loading dialog
+      if (mounted) Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Failed to generate preview: $e'),
@@ -2225,7 +2231,6 @@ class _SaleScreenState extends State<SaleScreen>
 
           const SizedBox(height: 14),
 
-          // Quick Print Preview Button - Show when cart has items and customer is selected
           if (_cartItems.isNotEmpty && _selectedCustomer != null) ...[
             OutlinedButton.icon(
               onPressed: _showQuickPrintPreview,
@@ -2243,7 +2248,6 @@ class _SaleScreenState extends State<SaleScreen>
             const SizedBox(height: 8),
           ],
 
-          // Main Action Button (Charge or Create Invoice)
           if (isPOS)
             Row(
               children: [
@@ -2552,21 +2556,17 @@ class _SaleScreenState extends State<SaleScreen>
                       ),
                       Expanded(
                         child: Row(
-                          mainAxisAlignment:
-                          MainAxisAlignment.center,
+                          mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            _qtyBtn(Icons.remove,
-                                    () => _updateQty(i, -1)),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8),
-                              child: Text(
-                                  item.quantity.toString(),
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.bold)),
+                            QuantityInput(
+                              quantity: item.quantity,
+                              width: 70,
+                              onChanged: (newQty) {
+                                setState(() {
+                                  _cartItems[i].quantity = newQty;
+                                });
+                              },
                             ),
-                            _qtyBtn(
-                                Icons.add, () => _updateQty(i, 1)),
                           ],
                         ),
                       ),
@@ -2787,7 +2787,6 @@ class _SaleScreenState extends State<SaleScreen>
             setState(() => _creditDueDate = null);
           }
 
-          Navigator.pop(ctx);
           await _submitSale(
             saleType: 'pos',
             paymentMethod: method,
@@ -2852,8 +2851,8 @@ class _SaleScreenState extends State<SaleScreen>
           children: [
             Container(
               padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF3F0FF),
+              decoration: const BoxDecoration(
+                color: Color(0xFFF3F0FF),
                 shape: BoxShape.circle,
               ),
               child: const Icon(
@@ -2910,7 +2909,8 @@ class _SaleScreenState extends State<SaleScreen>
     required String paymentMethod,
     required double amountPaid,
     Map<String, dynamic>? paymentDetails,
-  }) async {
+  })
+  async {
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -2971,36 +2971,10 @@ class _SaleScreenState extends State<SaleScreen>
 
     if (mounted) Navigator.pop(context);
 
-    // if (result['success'] == true) {
-    //   _clearCart();
-    //   if (mounted) {
-    //     String message;
-    //     if (isCredit) {
-    //       message = saleType == 'invoice'
-    //           ? 'Credit invoice created successfully!'
-    //           : 'Credit sale created successfully!';
-    //     } else {
-    //       message = saleType == 'invoice'
-    //           ? 'Invoice created successfully!'
-    //           : 'Sale completed successfully!';
-    //     }
-    //
-    //     ScaffoldMessenger.of(context).showSnackBar(
-    //       SnackBar(
-    //         content: Text(message),
-    //         backgroundColor: isCredit
-    //             ? const Color(0xFF7C3AED)
-    //             : const Color(0xFF10B981),
-    //       ),
-    //     );
-    //     Navigator.pop(context, true);
-    //   }
-    // }
     if (result['success'] == true) {
-      final saleData = result['data'] as Map<String, dynamic>;
-      final invoiceNumber = saleData['invoice_number'] ?? 'N/A';
+      final resultData = result['data'] as Map<String, dynamic>;
+      final invoiceNumber = resultData['invoice_number'] ?? 'N/A';
 
-      // Prepare items for PDF
       final items = _cartItems.map((item) => {
         'product_name': item.product.itemName,
         'quantity': item.quantity,
@@ -3008,7 +2982,6 @@ class _SaleScreenState extends State<SaleScreen>
       }).toList();
 
       try {
-        // Generate PDF
         final pdfData = await SalePdfGenerator.generateSalePdf(
           saleData: {'invoice_number': invoiceNumber},
           customer: _selectedCustomer,
@@ -3024,7 +2997,7 @@ class _SaleScreenState extends State<SaleScreen>
         );
 
         if (mounted) {
-          Navigator.pop(context); // Close loading dialog
+          Navigator.pop(context);
           _clearCart();
 
           String message;
@@ -3042,15 +3015,12 @@ class _SaleScreenState extends State<SaleScreen>
             ),
           );
 
-          // Show print dialog
           _showPrintDialog(pdfData, invoiceNumber);
-
-          // Navigate back with refresh flag
           Navigator.pop(context, true);
         }
       } catch (e) {
         if (mounted) {
-          Navigator.pop(context); // Close loading dialog
+          Navigator.pop(context);
           _clearCart();
 
           ScaffoldMessenger.of(context).showSnackBar(
@@ -3062,8 +3032,7 @@ class _SaleScreenState extends State<SaleScreen>
           Navigator.pop(context, true);
         }
       }
-    }
-    else {
+    } else {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -3077,7 +3046,8 @@ class _SaleScreenState extends State<SaleScreen>
   }
 
   String _buildNotes(
-      String paymentMethod, Map<String, dynamic>? paymentDetails) {
+      String paymentMethod, Map<String, dynamic>? paymentDetails)
+  {
     final List<String> notesParts = [];
 
     if (_invoiceNoteController.text.trim().isNotEmpty) {
@@ -3357,8 +3327,6 @@ class _AddCustomerDialogState
       }
     }
   }
-
-
 
   @override
   Widget build(BuildContext context) {

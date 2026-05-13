@@ -37,7 +37,7 @@ exports.createPurchaseReceipt = async (req, res) => {
   const transaction = await sequelize.transaction();
 
   try {
-    const { purchase_order_id, items, notes } = req.body;
+const { purchase_order_id, receipt_date, items, notes } = req.body;
 
     if (!purchase_order_id || !items || !items.length) {
       return res.status(400).json({
@@ -63,7 +63,7 @@ exports.createPurchaseReceipt = async (req, res) => {
       {
         receipt_number,
         purchase_order_id,
-        receipt_date: new Date(),
+        receipt_date: receipt_date ? new Date(receipt_date) : new Date(),
         status: 'completed',
         notes,
         created_by: req.user?.id,

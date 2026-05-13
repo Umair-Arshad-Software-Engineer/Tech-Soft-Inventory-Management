@@ -161,7 +161,8 @@ class SalePdfGenerator {
     required double amountPaid,
     DateTime? dueDate,
     String? notes,
-  }) async {
+  })
+  async {
     final pdf           = pw.Document();
     const double mmWidth = 226.77; // 80 mm in PDF points
     final invoiceNumber  = saleData['invoice_number'] ?? 'N/A';
@@ -179,11 +180,6 @@ class SalePdfGenerator {
                 style: pw.TextStyle(
                     fontSize: 14, fontWeight: pw.FontWeight.bold)),
             pw.SizedBox(height: 2),
-            pw.Text('POS RECEIPT',
-                style: pw.TextStyle(
-                    fontSize: 12,
-                    fontWeight: pw.FontWeight.bold,
-                    color: primaryColor)),
           ]),
         ),
         pw.SizedBox(height: 6),
@@ -414,12 +410,32 @@ class SalePdfGenerator {
     // Use a single page instead of MultiPage for POS receipts
     // Calculate approximate height based on content
     // Base height: header + footer + margins
-    double estimatedHeight = 250 + (items.length * 15); // Rough estimation
+    // double estimatedHeight = 250 + (items.length * 15); // Rough estimation
+    //
+    // pdf.addPage(
+    //   pw.Page(
+    //     pageFormat: PdfPageFormat(mmWidth, estimatedHeight, marginAll: 8),
+    //     build: (pw.Context context) => pageContent,
+    //   ),
+    // );
+    final PdfPageFormat roll80 = PdfPageFormat(
+      80 * PdfPageFormat.mm,
+      double.infinity,
+      marginLeft: 4,
+      marginRight: 4,
+      marginTop: 4,
+      marginBottom: 4,
+    );
 
     pdf.addPage(
       pw.Page(
-        pageFormat: PdfPageFormat(mmWidth, estimatedHeight, marginAll: 8),
-        build: (pw.Context context) => pageContent,
+        pageFormat: roll80,
+        build: (pw.Context context) {
+          return pw.Container(
+            width: double.infinity,
+            child: pageContent,
+          );
+        },
       ),
     );
 

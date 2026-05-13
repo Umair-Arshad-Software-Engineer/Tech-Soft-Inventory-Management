@@ -420,33 +420,73 @@ class _AddEditProductScreenState extends State<AddEditProductScreen> {
         ),
         const SizedBox(height: 16),
         Consumer<UnitProvider>(
-          builder: (context, provider, child) {
-            return DropdownButtonFormField<String?>(
-              value: _selectedUnitId,
-              decoration: const InputDecoration(
-                labelText: 'Unit *',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.square_foot),
+          builder: (context, provider, _) {
+            return FormField<String>(
+              validator: (v) =>
+              (_selectedUnitId == null || _selectedUnitId!.isEmpty)
+                  ? 'Unit is required'
+                  : null,
+              builder: (fieldState) => Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  InkWell(
+                    onTap: () async {
+                      final result = await showDialog<String>(
+                        context: context,
+                        builder: (ctx) => _UnitSearchDialog(
+                          units: provider.units,
+                          selectedId: _selectedUnitId,
+                        ),
+                      );
+                      if (result != null) {
+                        setState(() => _selectedUnitId = result);
+                        fieldState.didChange(result);
+                      }
+                    },
+                    child: InputDecorator(
+                      decoration: InputDecoration(
+                        labelText: 'Unit *',
+                        border: const OutlineInputBorder(),
+                        prefixIcon: const Icon(Icons.square_foot),
+                        errorText: fieldState.errorText,
+                        suffixIcon: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (_selectedUnitId != null)
+                              IconButton(
+                                icon: const Icon(Icons.clear, size: 18),
+                                onPressed: () {
+                                  setState(() => _selectedUnitId = null);
+                                  fieldState.didChange(null);
+                                },
+                              ),
+                            const Icon(Icons.arrow_drop_down),
+                          ],
+                        ),
+                      ),
+                      child: Text(
+                        _selectedUnitId != null
+                            ? () {
+                          try {
+                            final unit = provider.units.firstWhere(
+                                  (u) => u.id == _selectedUnitId,
+                            );
+                            return '${unit.name} (${unit.symbol})';
+                          } catch (e) {
+                            return 'Select Unit';
+                          }
+                        }()
+                            : 'Select Unit',
+                        style: TextStyle(
+                          color: _selectedUnitId != null
+                              ? const Color(0xFF2D3142)
+                              : Colors.grey[600],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              items: [
-                const DropdownMenuItem<String?>(
-                  value: null,
-                  child: Text('Select Unit'),
-                ),
-                ...provider.units.map((u) => DropdownMenuItem<String?>(
-                  value: u.id, // u.id is String - THIS FIXES THE ERROR
-                  child: Text('${u.name} (${u.symbol})'),
-                )),
-              ],
-              onChanged: (value) {
-                setState(() => _selectedUnitId = value);
-              },
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Unit is required';
-                }
-                return null;
-              },
             );
           },
         ),
@@ -655,5 +695,182 @@ class _AddEditProductScreenState extends State<AddEditProductScreen> {
         );
       }
     }
+  }
+}
+
+// ─────────────────────────────────────────────
+// Unit widget
+// ─────────────────────────────────────────────
+
+class _UnitSearchDialog extends StatefulWidget {
+  final List<dynamic> units;
+  final String? selectedId;
+
+  const _UnitSearchDialog({required this.units, this.selectedId});
+
+  @override
+  State<_UnitSearchDialog> createState() => _UnitSearchDialogState();
+}
+
+class _UnitSearchDialogState extends State<_UnitSearchDialog> {
+  final _searchController = TextEditingController();
+  List<dynamic> _filtered = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _filtered = widget.units;
+    _searchController.addListener(() {
+      final q = _searchController.text.toLowerCase();
+      setState(() {
+        _filtered = q.isEmpty
+            ? widget.units
+            : widget.units
+            .where((u) =>
+        u.name.toLowerCase().contains(q) ||
+            u.symbol.toLowerCase().contains(q))
+            .toList();
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Header
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 12, 0),
+            child: Row(
+              children: [
+                const Icon(Icons.square_foot, color: Color(0xFF7C3AED)),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    'Select Unit',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF2D3142),
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+          ),
+          // Search field
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: TextField(
+              controller: _searchController,
+              autofocus: true,
+              decoration: InputDecoration(
+                hintText: 'Search units...',
+                prefixIcon: const Icon(Icons.search, color: Color(0xFF7C3AED)),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Color(0xFF7C3AED)),
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                    vertical: 10, horizontal: 12),
+                suffixIcon: _searchController.text.isNotEmpty
+                    ? IconButton(
+                  icon: const Icon(Icons.clear, size: 18),
+                  onPressed: () => _searchController.clear(),
+                )
+                    : null,
+              ),
+            ),
+          ),
+          // List
+          ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.4,
+            ),
+            child: _filtered.isEmpty
+                ? const Padding(
+              padding: EdgeInsets.all(24),
+              child: Text(
+                'No units found',
+                style: TextStyle(color: Colors.grey),
+              ),
+            )
+                : ListView.separated(
+              shrinkWrap: true,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              itemCount: _filtered.length,
+              separatorBuilder: (_, __) =>
+              const Divider(height: 1, indent: 16),
+              itemBuilder: (context, index) {
+                final unit = _filtered[index];
+                final isSelected = unit.id == widget.selectedId;
+                return ListTile(
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8)),
+                  leading: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? const Color(0xFF7C3AED)
+                          : const Color(0xFFEDE9FB),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      unit.symbol,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                        color: isSelected
+                            ? Colors.white
+                            : const Color(0xFF7C3AED),
+                      ),
+                    ),
+                  ),
+                  title: Text(
+                    unit.name,
+                    style: TextStyle(
+                      fontWeight: isSelected
+                          ? FontWeight.bold
+                          : FontWeight.normal,
+                      color: const Color(0xFF2D3142),
+                    ),
+                  ),
+                  subtitle: Text(
+                    'Symbol: ${unit.symbol}',
+                    style: const TextStyle(
+                        fontSize: 12, color: Colors.grey),
+                  ),
+                  trailing: isSelected
+                      ? const Icon(Icons.check_circle,
+                      color: Color(0xFF7C3AED))
+                      : null,
+                  onTap: () => Navigator.pop(context, unit.id),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
+      ),
+    );
   }
 }

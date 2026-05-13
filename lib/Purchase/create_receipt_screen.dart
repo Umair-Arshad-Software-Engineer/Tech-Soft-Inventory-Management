@@ -34,6 +34,7 @@ class _CreateReceiptScreenState extends State<CreateReceiptScreen> {
   // Extra items added manually (not from the PO)
   final List<_ExtraReceiptItem> _extraItems = [];
 
+  DateTime _receiptDate = DateTime.now();
   bool _isLoading = false;
   bool _showAddExtra = false;
 
@@ -323,6 +324,106 @@ class _CreateReceiptScreenState extends State<CreateReceiptScreen> {
     setState(() {});
   }
 
+  Widget _buildReceiptDateCard() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE5E5EA)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.calendar_today_outlined,
+                  size: 18, color: Color(0xFF7C3AED)),
+              SizedBox(width: 8),
+              Text(
+                'Receipt Date',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF1C1C1E),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          GestureDetector(
+            onTap: () async {
+              final picked = await showDatePicker(
+                context: context,
+                initialDate: _receiptDate,
+                firstDate: DateTime(2000),
+                lastDate: DateTime.now().add(const Duration(days: 30)),
+                builder: (ctx, child) => Theme(
+                  data: Theme.of(ctx).copyWith(
+                    colorScheme: const ColorScheme.light(
+                        primary: Color(0xFF7C3AED)),
+                  ),
+                  child: child!,
+                ),
+              );
+              if (picked != null) setState(() => _receiptDate = picked);
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 14, vertical: 14),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF5F5F7),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                    color: const Color(0xFF7C3AED).withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF7C3AED).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.calendar_month,
+                        size: 18, color: Color(0xFF7C3AED)),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Selected Date',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Color(0xFF8E8E93),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _dateFormat.format(_receiptDate),
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF1C1C1E),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(Icons.edit_calendar_outlined,
+                      size: 18, color: Color(0xFF8E8E93)),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   // ─── Build ─────────────────────────────────────────────────────────────────
 
   @override
@@ -362,6 +463,8 @@ class _CreateReceiptScreenState extends State<CreateReceiptScreen> {
                 if (items.isNotEmpty) _buildItemsTable(items),
                 const SizedBox(height: 16),
                 _buildExtraItemsSection(),
+                const SizedBox(height: 16),
+                _buildReceiptDateCard(),
                 const SizedBox(height: 16),
                 _buildNotesCard(),
                 const SizedBox(height: 24),
@@ -408,12 +511,12 @@ class _CreateReceiptScreenState extends State<CreateReceiptScreen> {
         ],
       ),
       actions: [
-      IconButton(
-        icon: const Icon(Icons.print_outlined, color: Color(0xFF7C3AED)),
-        onPressed: _printReceiptPreview,
-        tooltip: 'Print Preview',
-      ),
-    ],
+        IconButton(
+          icon: const Icon(Icons.print_outlined, color: Color(0xFF7C3AED)),
+          onPressed: _printReceiptPreview,
+          tooltip: 'Print Preview',
+        ),
+      ],
       bottom: PreferredSize(
         preferredSize: const Size.fromHeight(1),
         child: Container(height: 1, color: const Color(0xFFE5E5EA)),
@@ -604,6 +707,7 @@ class _CreateReceiptScreenState extends State<CreateReceiptScreen> {
                 _buildHeaderCell('ORDERED', flex: 2),
                 _buildHeaderCell('RECV\'D', flex: 2),
                 _buildHeaderCell('REM.', flex: 2),
+                _buildHeaderCell('UNIT', flex: 2),       // ← ADD THIS
                 _buildHeaderCell('QTY NOW', flex: 3, alignRight: false),
               ],
             ),
@@ -759,7 +863,26 @@ class _CreateReceiptScreenState extends State<CreateReceiptScreen> {
               ),
             ),
           ),
-
+          Expanded(
+            flex: 2,
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF0F4FF),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                item.product?.unit?.symbol ?? '—',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF4B5563),
+                ),
+              ),
+            ),
+          ),
           // Qty to receive (editable)
           Expanded(
             flex: 3,
@@ -1943,6 +2066,7 @@ class _CreateReceiptScreenState extends State<CreateReceiptScreen> {
       Provider.of<PurchaseReceiptProvider>(context, listen: false);
       final result = await provider.createPurchaseReceipt({
         'purchase_order_id': widget.orderId,
+        'receipt_date': DateFormat('yyyy-MM-dd').format(_receiptDate.toLocal()),
         'items': receiptItems,
         'notes': _notesController.text.isEmpty
             ? null

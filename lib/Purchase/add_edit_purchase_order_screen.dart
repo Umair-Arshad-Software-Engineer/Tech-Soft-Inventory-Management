@@ -56,6 +56,9 @@ class _AddEditPurchaseOrderScreenState
 
   final NumberFormat _currency = NumberFormat.currency(symbol: '\$');
 
+  DateTime _orderDate = DateTime.now();
+
+
   @override
   void initState() {
     super.initState();
@@ -229,12 +232,11 @@ class _AddEditPurchaseOrderScreenState
       };
     }).toList();
 
-    // Create temporary order object for preview
     final tempOrder = PurchaseOrderModel(
       id: 0,
       poNumber: 'PREVIEW-${DateTime.now().millisecondsSinceEpoch}',
       supplierId: _selectedSupplierId!,
-      orderDate: DateTime.now(),
+      orderDate: _orderDate,
       expectedDeliveryDate: _expectedDeliveryDate,
       deliveryDate: null,
       status: 'draft',
@@ -311,6 +313,7 @@ class _AddEditPurchaseOrderScreenState
 
   void _populateForm(PurchaseOrderModel order) {
     _selectedSupplierId = order.supplierId;
+    _orderDate = order.orderDate;              // ← ADD THIS
     _expectedDeliveryDate = order.expectedDeliveryDate;
     _notesController.text = order.notes ?? '';
     _termsController.text = order.termsConditions ?? '';
@@ -336,6 +339,8 @@ class _AddEditPurchaseOrderScreenState
         _items.add(PurchaseOrderItemRow(
           selectedProductId: item.productId,
           productName: item.product?.itemName ?? 'Unknown',
+          unitSymbol: product?.unit?.symbol ?? '',   // ← ADD THIS
+
           quantityController:
           TextEditingController(text: item.quantityOrdered.toString()),
           unitCostController:
@@ -580,6 +585,44 @@ class _AddEditPurchaseOrderScreenState
             onTap: () async {
               final date = await showDatePicker(
                 context: context,
+                initialDate: _orderDate,
+                firstDate: DateTime(2020),
+                lastDate: DateTime.now().add(const Duration(days: 1)),
+                builder: (ctx, child) => Theme(
+                  data: Theme.of(ctx).copyWith(
+                    colorScheme: const ColorScheme.light(primary: Color(0xFF7C3AED)),
+                  ),
+                  child: child!,
+                ),
+              );
+              if (date != null) setState(() => _orderDate = date);
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+              decoration: BoxDecoration(
+                border: Border.all(color: const Color(0xFFD1D5DB)),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.calendar_today, size: 16, color: Colors.grey[600]),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Order Date: ${DateFormat('MMM dd, yyyy').format(_orderDate)}',
+                      style: const TextStyle(color: Colors.black87),
+                    ),
+                  ),
+                  const Icon(Icons.arrow_drop_down, color: Colors.grey),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          InkWell(
+            onTap: () async {
+              final date = await showDatePicker(
+                context: context,
                 initialDate: _expectedDeliveryDate ??
                     DateTime.now().add(const Duration(days: 7)),
                 firstDate: DateTime.now(),
@@ -777,6 +820,7 @@ class _AddEditPurchaseOrderScreenState
                 const SizedBox(width: 32), // index col
                 _headerCell('Product', flex: 4),
                 _headerCell('Qty', flex: 2),
+                _headerCell('Unit', flex: 2),           // ← ADD THIS
                 _headerCell('Unit Cost', flex: 3),
                 _headerCell('Disc %', flex: 2),
                 _headerCell('Tax %', flex: 2),
@@ -942,7 +986,28 @@ class _AddEditPurchaseOrderScreenState
             ),
           ),
           const SizedBox(width: 6),
-
+// Unit
+          Expanded(
+            flex: 2,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF0F4FF),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                row.unitSymbol.isNotEmpty ? row.unitSymbol : '—',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF4B5563),
+                ),
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
           // Unit cost
           Expanded(
             flex: 3,
@@ -1074,6 +1139,7 @@ class _AddEditPurchaseOrderScreenState
                 final product =
                 productProvider.products.firstWhere((p) => p.id == v);
                 row.productName = product.itemName;
+                row.unitSymbol = product.unit?.symbol ?? '';   // ← ADD THIS
                 row.unitCostController.text =
                     product.costPrice.toString();
                 _recalculate();
@@ -1367,6 +1433,7 @@ class _AddEditPurchaseOrderScreenState
 
     final orderData = {
       'supplier_id': _selectedSupplierId,
+      'order_date': _orderDate.toIso8601String(),   // ← ADD THIS
       'expected_delivery_date': _expectedDeliveryDate?.toIso8601String(),
       'items': validItems
           .map((r) => {
@@ -1431,6 +1498,7 @@ class _AddEditPurchaseOrderScreenState
 class PurchaseOrderItemRow {
   int? selectedProductId;
   String productName;
+  String unitSymbol;          // ← ADD THIS
   final TextEditingController quantityController;
   final TextEditingController unitCostController;
   final TextEditingController discountController;
@@ -1440,6 +1508,7 @@ class PurchaseOrderItemRow {
   PurchaseOrderItemRow({
     this.selectedProductId,
     this.productName = '',
+    this.unitSymbol = '',      // ← ADD THIS
     required this.quantityController,
     required this.unitCostController,
     required this.discountController,
@@ -1453,6 +1522,7 @@ class PurchaseOrderItemRow {
     discountController: TextEditingController(text: '0'),
     taxController: TextEditingController(text: '0'),
     notesController: TextEditingController(),
+    unitSymbol: '',            // ← ADD THIS
   );
 
   void dispose() {

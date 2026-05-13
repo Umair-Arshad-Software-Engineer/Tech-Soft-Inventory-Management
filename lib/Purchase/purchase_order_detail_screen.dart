@@ -11,8 +11,8 @@ import '../../models/purchase_order_model.dart';
 import '../components/loading_indicator.dart';
 import '../components/error_widget.dart';
 import '../services/purchase_pdf_generator.dart';
-import '../Purchase/add_edit_purchase_order_screen.dart';
-import '../Purchase/create_receipt_screen.dart';
+import 'add_edit_purchase_order_screen.dart';
+import 'create_receipt_screen.dart';
 
 class PurchaseOrderDetailScreen extends StatefulWidget {
   final int orderId;
@@ -686,19 +686,47 @@ class _PurchaseOrderDetailScreenState
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ── Product name + received/ordered badge ──
+              // ── Product name + unit badge + received/ordered badge ──
               Row(
                 children: [
                   Expanded(
-                    child: Text(
-                      item.product?.itemName ?? 'Unknown Product',
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w600, fontSize: 15),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            item.product?.itemName ?? 'Unknown Product',
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w600, fontSize: 15),
+                          ),
+                        ),
+                        // ── ADD THIS ──
+                        if (item.product?.unit?.symbol != null) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 7, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF0F4FF),
+                              borderRadius: BorderRadius.circular(5),
+                              border: Border.all(
+                                  color: const Color(0xFF7C3AED).withOpacity(0.2)),
+                            ),
+                            child: Text(
+                              item.product!.unit!.symbol,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF4B5563),
+                              ),
+                            ),
+                          ),
+                        ],
+                        // ─────────────
+                      ],
                     ),
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
                       color: badgeBg,
                       borderRadius: BorderRadius.circular(4),
@@ -722,9 +750,14 @@ class _PurchaseOrderDetailScreenState
                   Expanded(
                       child: _buildItemDetail('Unit Cost',
                           currencyFormat.format(item.unitCost))),
+                  // ── CHANGE THIS ──
                   Expanded(
                       child: _buildItemDetail(
-                          'Qty', '× ${item.quantityOrdered}')),
+                          'Qty',
+                          item.product?.unit?.symbol != null
+                              ? '× ${item.quantityOrdered} ${item.product!.unit!.symbol}'
+                              : '× ${item.quantityOrdered}')),
+                  // ─────────────────
                 ],
               ),
               const SizedBox(height: 8),
