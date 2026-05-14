@@ -25,6 +25,9 @@ class SaleItem {
   double unitPrice;
   double? customerSpecificPrice;
   bool usingCustomerPrice;
+  double itemDiscountPercent;   // ← new
+  double itemDiscountAmount;    // ← new
+  bool itemUsePercentDiscount;  // ← new
 
   SaleItem({
     required this.product,
@@ -32,12 +35,21 @@ class SaleItem {
     required this.unitPrice,
     this.customerSpecificPrice,
     this.usingCustomerPrice = false,
+    this.itemDiscountPercent = 0,
+    this.itemDiscountAmount = 0,
+    this.itemUsePercentDiscount = true,
   });
 
-  double get total => unitPrice * quantity;
   double get standardPrice => product.salePrice.toDouble();
   bool get hasPriceDifference =>
       customerSpecificPrice != null && customerSpecificPrice != standardPrice;
+
+  double get itemDiscountValue => itemUsePercentDiscount
+      ? unitPrice * (itemDiscountPercent / 100)
+      : itemDiscountAmount;
+
+  double get effectiveUnitPrice => unitPrice - itemDiscountValue;
+  double get total => effectiveUnitPrice * quantity;
 }
 
 // Quantity Input Widget - Reusable component
@@ -178,8 +190,16 @@ class _SaleScreenState extends State<SaleScreen>
   //  COMPUTED
   // ─────────────────────────────────────────────
 
+
   double get _subtotal =>
       _cartItems.fold(0.0, (sum, item) => sum + item.total);
+
+// Also update _customerPriceSavings to account for effective price
+  double get _customerPriceSavings => _cartItems
+      .where((i) => i.usingCustomerPrice && i.hasPriceDifference)
+      .fold(0.0,
+          (sum, i) => sum + ((i.standardPrice - i.unitPrice) * i.quantity));
+
 
   double get _discountValue => _usePercentDiscount
       ? _subtotal * (_discountPercent / 100)
@@ -187,10 +207,6 @@ class _SaleScreenState extends State<SaleScreen>
 
   double get _grandTotal => _subtotal - _discountValue;
 
-  double get _customerPriceSavings => _cartItems
-      .where((i) => i.usingCustomerPrice && i.hasPriceDifference)
-      .fold(0.0,
-          (sum, i) => sum + ((i.standardPrice - i.unitPrice) * i.quantity));
 
   // ─────────────────────────────────────────────
   //  DISCOUNT CONTROLLER HELPERS
@@ -1462,6 +1478,13 @@ class _SaleScreenState extends State<SaleScreen>
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
+                    Text(
+                      'Stock ${product.physicalQty}',
+                      style: const TextStyle(
+                          fontSize: 9,
+                          color: Color(0xFF9CA3AF),
+                          ),
+                    ),
                     const SizedBox(height: 4),
                     Wrap(
                       spacing: 4,
@@ -1477,6 +1500,7 @@ class _SaleScreenState extends State<SaleScreen>
                               const Color(0xFF065F46)),
                       ],
                     ),
+
                     const Spacer(),
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.end,
@@ -1494,6 +1518,7 @@ class _SaleScreenState extends State<SaleScreen>
                                         ? const Color(0xFF10B981)
                                         : const Color(0xFF7C3AED)),
                               ),
+
                               if (hasCustomPrice)
                                 Text(
                                   'Rs ${product.salePrice.toStringAsFixed(0)}',
@@ -1503,6 +1528,7 @@ class _SaleScreenState extends State<SaleScreen>
                                       decoration:
                                       TextDecoration.lineThrough),
                                 ),
+
                             ],
                           ),
                         ),
@@ -1727,8 +1753,8 @@ class _SaleScreenState extends State<SaleScreen>
 
   Widget _buildCartItem(int index) {
     final item = _cartItems[index];
-    final showCustomBadge =
-        item.usingCustomerPrice && item.hasPriceDifference;
+    final showCustomBadge = item.usingCustomerPrice && item.hasPriceDifference;
+    final hasItemDiscount = item.itemDiscountValue > 0;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -1747,6 +1773,7 @@ class _SaleScreenState extends State<SaleScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ── Row 1: name + remove ──
           Row(
             children: [
               Expanded(
@@ -1791,16 +1818,18 @@ class _SaleScreenState extends State<SaleScreen>
             ],
           ),
           const SizedBox(height: 6),
+
+          // ── Row 2: price | qty | total ──
           Row(
             children: [
+              // Unit price field
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   SizedBox(
                     width: 84,
                     child: TextFormField(
-                      key: ValueKey(
-                          'price_${index}_${item.unitPrice}'),
+                      key: ValueKey('price_${index}_${item.unitPrice}'),
                       initialValue: item.unitPrice.toStringAsFixed(2),
                       style: TextStyle(
                         fontSize: 12,
@@ -1838,8 +1867,7 @@ class _SaleScreenState extends State<SaleScreen>
                       onChanged: (v) {
                         final parsed = double.tryParse(v);
                         if (parsed != null) {
-                          setState(
-                                  () => _cartItems[index].unitPrice = parsed);
+                          setState(() => _cartItems[index].unitPrice = parsed);
                         }
                       },
                     ),
@@ -1857,32 +1885,145 @@ class _SaleScreenState extends State<SaleScreen>
                     ),
                 ],
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
+
+              // ── Item discount field ──
+              _buildItemDiscountField(index, item),
+
               const Spacer(),
               QuantityInput(
                 quantity: item.quantity,
-                width: 70,
+                width: 65,
                 onChanged: (newQty) {
-                  setState(() {
-                    _cartItems[index].quantity = newQty;
-                  });
+                  setState(() => _cartItems[index].quantity = newQty);
                 },
               ),
               const SizedBox(width: 8),
               SizedBox(
                 width: 72,
-                child: Text(
-                  'Rs ${item.total.toStringAsFixed(2)}',
-                  textAlign: TextAlign.right,
-                  style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                      color: item.usingCustomerPrice
-                          ? const Color(0xFF10B981)
-                          : const Color(0xFF7C3AED)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      'Rs ${item.total.toStringAsFixed(2)}',
+                      textAlign: TextAlign.right,
+                      style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: hasItemDiscount
+                              ? const Color(0xFF7C3AED)
+                              : item.usingCustomerPrice
+                              ? const Color(0xFF10B981)
+                              : const Color(0xFF7C3AED)),
+                    ),
+                    if (hasItemDiscount)
+                      Text(
+                        'Rs ${(item.unitPrice * item.quantity).toStringAsFixed(2)}',
+                        textAlign: TextAlign.right,
+                        style: const TextStyle(
+                            fontSize: 9,
+                            color: Color(0xFF9CA3AF),
+                            decoration: TextDecoration.lineThrough),
+                      ),
+                  ],
                 ),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildItemDiscountField(int index, SaleItem item) {
+    return SizedBox(
+      width: 90,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Text('Disc',
+                  style: TextStyle(
+                      fontSize: 9,
+                      color: Color(0xFF9CA3AF),
+                      fontWeight: FontWeight.w500)),
+              const SizedBox(width: 3),
+              GestureDetector(
+                onTap: () => setState(() {
+                  _cartItems[index].itemUsePercentDiscount =
+                  !_cartItems[index].itemUsePercentDiscount;
+                }),
+                child: Container(
+                  padding:
+                  const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                  decoration: BoxDecoration(
+                      color: const Color(0xFFF3F4F6),
+                      borderRadius: BorderRadius.circular(4)),
+                  child: Text(
+                    item.itemUsePercentDiscount ? '%' : 'Rs',
+                    style: const TextStyle(
+                        fontSize: 8,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF7C3AED)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          SizedBox(
+            height: 30,
+            child: TextFormField(
+              key: ValueKey(
+                  'disc_${index}_${item.itemUsePercentDiscount}'),
+              initialValue: item.itemUsePercentDiscount
+                  ? (item.itemDiscountPercent > 0
+                  ? item.itemDiscountPercent.toStringAsFixed(1)
+                  : '')
+                  : (item.itemDiscountAmount > 0
+                  ? item.itemDiscountAmount.toStringAsFixed(2)
+                  : ''),
+              keyboardType:
+              const TextInputType.numberWithOptions(decimal: true),
+              style: const TextStyle(fontSize: 11),
+              decoration: InputDecoration(
+                hintText: item.itemUsePercentDiscount ? '0%' : '0 Rs',
+                hintStyle: const TextStyle(
+                    fontSize: 10, color: Color(0xFFD1D5DB)),
+                isDense: true,
+                contentPadding:
+                const EdgeInsets.symmetric(horizontal: 6, vertical: 7),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(6),
+                  borderSide: BorderSide(
+                    color: item.itemDiscountValue > 0
+                        ? const Color(0xFF7C3AED).withOpacity(0.5)
+                        : const Color(0xFFD1D5DB),
+                  ),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(6),
+                  borderSide: BorderSide(
+                    color: item.itemDiscountValue > 0
+                        ? const Color(0xFF7C3AED).withOpacity(0.5)
+                        : const Color(0xFFD1D5DB),
+                  ),
+                ),
+              ),
+              onChanged: (v) {
+                final parsed = double.tryParse(v) ?? 0.0;
+                setState(() {
+                  if (_cartItems[index].itemUsePercentDiscount) {
+                    _cartItems[index].itemDiscountPercent =
+                        parsed.clamp(0, 100);
+                  } else {
+                    _cartItems[index].itemDiscountAmount =
+                        parsed.clamp(0, _cartItems[index].unitPrice);
+                  }
+                });
+              },
+            ),
           ),
         ],
       ),
@@ -2135,10 +2276,16 @@ class _SaleScreenState extends State<SaleScreen>
   Future<void> _showQuickPrintPreview() async {
     if (_cartItems.isEmpty || _selectedCustomer == null) return;
 
-    final items = _cartItems.map((item) => {
+    final itemsForPdf = _cartItems.map((item) => {
       'product_name': item.product.itemName,
       'quantity': item.quantity,
       'unit_price': item.unitPrice,
+      'effective_unit_price': item.effectiveUnitPrice,
+      'item_discount_type': item.itemUsePercentDiscount ? 'percent' : 'fixed',
+      'item_discount_value': item.itemUsePercentDiscount
+          ? item.itemDiscountPercent
+          : item.itemDiscountAmount,
+      'item_discount_amount': item.itemDiscountValue,
     }).toList();
 
     try {
@@ -2153,7 +2300,7 @@ class _SaleScreenState extends State<SaleScreen>
       final pdfData = await SalePdfGenerator.generateSalePdf(
         saleData: {'invoice_number': 'PREVIEW-${DateTime.now().millisecondsSinceEpoch}'},
         customer: _selectedCustomer,
-        items: items,
+        items: itemsForPdf,
         subtotal: _subtotal,
         discountValue: _discountValue,
         grandTotal: _grandTotal,
@@ -2540,6 +2687,19 @@ class _SaleScreenState extends State<SaleScreen>
                                           fontSize: 13,
                                           fontWeight:
                                           FontWeight.w500)),
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.inventory_2_outlined,
+                                          size: 10, color: Color(0xFF9CA3AF)),
+                                      const SizedBox(width: 2),
+                                      Text(
+                                        'Stock: ${item.product.physicalQty} ${item.product.unit?.symbol ?? ''}',
+                                        style: const TextStyle(
+                                            fontSize: 9,
+                                            color: Color(0xFF9CA3AF)),
+                                      ),
+                                    ],
+                                  ),
                                   if (item.usingCustomerPrice &&
                                       item.hasPriceDifference)
                                     Text(
@@ -2570,6 +2730,7 @@ class _SaleScreenState extends State<SaleScreen>
                           ],
                         ),
                       ),
+                      // Replace the Price column Expanded widget in the invoice table:
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.end,
@@ -2582,20 +2743,25 @@ class _SaleScreenState extends State<SaleScreen>
                                   color: item.usingCustomerPrice
                                       ? const Color(0xFF10B981)
                                       : null,
-                                  fontWeight:
-                                  item.usingCustomerPrice
+                                  fontWeight: item.usingCustomerPrice
                                       ? FontWeight.w600
                                       : FontWeight.normal),
                             ),
-                            if (item.usingCustomerPrice &&
-                                item.hasPriceDifference)
+                            if (item.itemDiscountValue > 0)
+                              Text(
+                                item.itemUsePercentDiscount
+                                    ? '-${item.itemDiscountPercent.toStringAsFixed(1)}%'
+                                    : '-Rs ${item.itemDiscountAmount.toStringAsFixed(2)}',
+                                style: const TextStyle(
+                                    fontSize: 9, color: Color(0xFF7C3AED)),
+                              ),
+                            if (item.usingCustomerPrice && item.hasPriceDifference)
                               Text(
                                 'Rs ${item.standardPrice.toStringAsFixed(2)}',
                                 style: const TextStyle(
                                     fontSize: 10,
                                     color: Color(0xFF9CA3AF),
-                                    decoration:
-                                    TextDecoration.lineThrough),
+                                    decoration: TextDecoration.lineThrough),
                               ),
                           ],
                         ),
@@ -2938,11 +3104,18 @@ class _SaleScreenState extends State<SaleScreen>
       'due_date': isCredit && _creditDueDate != null
           ? _creditDueDate!.toIso8601String().split('T').first
           : _dueDate?.toIso8601String().split('T').first,
+// In _submitSale, update the items mapping:
       'items': _cartItems
           .map((item) => {
         'product_id': item.product.id,
         'quantity': item.quantity,
         'unit_price': item.unitPrice,
+        'item_discount_type': item.itemUsePercentDiscount ? 'percent' : 'fixed',
+        'item_discount_value': item.itemUsePercentDiscount
+            ? item.itemDiscountPercent
+            : item.itemDiscountAmount,
+        'item_discount_amount': item.itemDiscountValue,
+        'effective_unit_price': item.effectiveUnitPrice,
       })
           .toList(),
       'discount_type':
@@ -2975,17 +3148,28 @@ class _SaleScreenState extends State<SaleScreen>
       final resultData = result['data'] as Map<String, dynamic>;
       final invoiceNumber = resultData['invoice_number'] ?? 'N/A';
 
-      final items = _cartItems.map((item) => {
+      // final items = _cartItems.map((item) => {
+      //   'product_name': item.product.itemName,
+      //   'quantity': item.quantity,
+      //   'unit_price': item.unitPrice,
+      // }).toList();
+      final itemsForPdf = _cartItems.map((item) => {
         'product_name': item.product.itemName,
         'quantity': item.quantity,
         'unit_price': item.unitPrice,
+        'effective_unit_price': item.effectiveUnitPrice,
+        'item_discount_type': item.itemUsePercentDiscount ? 'percent' : 'fixed',
+        'item_discount_value': item.itemUsePercentDiscount
+            ? item.itemDiscountPercent
+            : item.itemDiscountAmount,
+        'item_discount_amount': item.itemDiscountValue,  // This is the discount per unit
       }).toList();
 
       try {
         final pdfData = await SalePdfGenerator.generateSalePdf(
           saleData: {'invoice_number': invoiceNumber},
           customer: _selectedCustomer,
-          items: items,
+          items: itemsForPdf,  // Use this instead of the old mapping
           subtotal: _subtotal,
           discountValue: _discountValue,
           grandTotal: _grandTotal,
@@ -3015,8 +3199,8 @@ class _SaleScreenState extends State<SaleScreen>
             ),
           );
 
-          _showPrintDialog(pdfData, invoiceNumber);
           Navigator.pop(context, true);
+          await SalePdfGenerator.printPdf(pdfData);  // ← auto-print
         }
       } catch (e) {
         if (mounted) {

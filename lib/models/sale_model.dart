@@ -202,6 +202,10 @@ class SaleItemModel {
   final int quantity;
   final double totalPrice;
   final ProductInfo? product;
+  final String itemDiscountType;
+  final double itemDiscountValue;
+  final double itemDiscountAmount;
+  final double? effectiveUnitPrice;
 
   SaleItemModel({
     required this.id,
@@ -212,6 +216,10 @@ class SaleItemModel {
     required this.quantity,
     required this.totalPrice,
     this.product,
+    this.itemDiscountType = 'fixed',
+    this.itemDiscountValue = 0.0,
+    this.itemDiscountAmount = 0.0,
+    this.effectiveUnitPrice,
   });
 
   factory SaleItemModel.fromJson(Map<String, dynamic> json) {
@@ -240,6 +248,12 @@ class SaleItemModel {
       totalPrice: toDoubleSafe(json['total_price']),
       product: json['product'] != null
           ? ProductInfo.fromJson(json['product'])
+          : null,
+      itemDiscountType: json['item_discount_type'] ?? 'fixed',
+      itemDiscountValue: toDoubleSafe(json['item_discount_value']),
+      itemDiscountAmount: toDoubleSafe(json['item_discount_amount']),
+      effectiveUnitPrice: json['effective_unit_price'] != null
+          ? toDoubleSafe(json['effective_unit_price'])
           : null,
     );
   }

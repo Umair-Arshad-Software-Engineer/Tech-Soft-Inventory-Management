@@ -441,7 +441,8 @@ class _SalesListScreenState extends State<SalesListScreen> {
   Widget _buildSaleCard(SaleModel sale) {
     final bool isCredit = sale.paymentMethod == 'credit';
     final bool isOverdue = sale.isOverdue;
-    final bool hasReturn = sale.returnStatus != null;
+    final bool hasReturn = sale.returnStatus != null &&
+        sale.returnStatus != 'none';
     final bool isFullReturn = sale.returnStatus == 'fully_returned';
     final bool isPartialReturn = sale.returnStatus == 'partial_return';
 

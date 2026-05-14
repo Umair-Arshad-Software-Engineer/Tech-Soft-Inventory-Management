@@ -849,6 +849,8 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
 
             // ── Items Table ─────────────────────────────────────
             _buildItemsTable(),
+            const SizedBox(height: 16),
+            _buildDiscountSummary(),  // Add this line
             const SizedBox(height: 24),
 
             // ── Payment Summary + Info ──────────────────────────
@@ -1132,6 +1134,7 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
   // ─────────────────────────────────────────────────────────────
   //  ITEMS TABLE
   // ─────────────────────────────────────────────────────────────
+  // Updated _buildItemsTable method that works with your SaleItemModel
   Widget _buildItemsTable() {
     return Container(
       padding: const EdgeInsets.all(20),
@@ -1153,49 +1156,91 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
             ),
             child: Column(
               children: [
+                // Header row with discount column
                 Container(
                   padding: const EdgeInsets.symmetric(
                       horizontal: 16, vertical: 12),
                   decoration: const BoxDecoration(
                     color: Color(0xFFF9FAFB),
-                    borderRadius:
-                    BorderRadius.vertical(top: Radius.circular(8)),
+                    borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
                   ),
-                  child: const Row(
+                  child: Row(
                     children: [
-                      Expanded(
+                      const Expanded(
                           flex: 3,
                           child: Text('Product',
-                              style:
-                              TextStyle(fontWeight: FontWeight.bold))),
-                      Expanded(
+                              style: TextStyle(fontWeight: FontWeight.bold))),
+                      const Expanded(
                           child: Text('Qty',
                               textAlign: TextAlign.center,
-                              style:
-                              TextStyle(fontWeight: FontWeight.bold))),
-                      Expanded(
+                              style: TextStyle(fontWeight: FontWeight.bold))),
+                      const Expanded(
                           child: Text('Price',
                               textAlign: TextAlign.right,
-                              style:
-                              TextStyle(fontWeight: FontWeight.bold))),
+                              style: TextStyle(fontWeight: FontWeight.bold))),
                       Expanded(
+                          flex: 1,
+                          child: Text('Discount',
+                              textAlign: TextAlign.right,
+                              style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.orange.shade700))),
+                      const Expanded(
                           child: Text('Total',
                               textAlign: TextAlign.right,
-                              style:
-                              TextStyle(fontWeight: FontWeight.bold))),
+                              style: TextStyle(fontWeight: FontWeight.bold))),
                     ],
                   ),
                 ),
                 ...?_sale!.items?.asMap().entries.map((entry) {
                   final index = entry.key;
                   final item = entry.value;
+
+                  // Calculate item discount info - using actual model properties
+                  final hasItemDiscount = item.itemDiscountAmount > 0;
+                  final discountValue = item.itemDiscountValue;
+                  final discountType = item.itemDiscountType;
+                  final discountAmount = item.itemDiscountAmount;
+
+                  // Calculate effective unit price (after discount)
+                  double effectiveUnitPrice;
+                  if (hasItemDiscount) {
+                    if (discountType == 'percent') {
+                      // For percent discount, discountValue is the percentage
+                      effectiveUnitPrice = item.unitPrice * (1 - discountValue / 100);
+                    } else {
+                      // For fixed discount, discountAmount is the amount per unit
+                      effectiveUnitPrice = item.unitPrice - discountAmount;
+                    }
+                  } else {
+                    effectiveUnitPrice = item.unitPrice;
+                  }
+
+                  final totalWithDiscount = effectiveUnitPrice * item.quantity;
+
+                  // Format discount display text
+                  String discountDisplay = '—';
+                  String discountSubtext = '';
+                  if (hasItemDiscount) {
+                    if (discountType == 'percent') {
+                      discountDisplay = '${discountValue.toStringAsFixed(1)}%';
+                      final amountSaved = (item.unitPrice * discountValue / 100);
+                      discountSubtext = '(Rs ${amountSaved.toStringAsFixed(2)})';
+                    } else {
+                      discountDisplay = _currencyFormat.format(discountAmount);
+                      discountSubtext = 'per item';
+                    }
+                  }
+
                   return Container(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 16, vertical: 12),
                     decoration: BoxDecoration(
                       border: const Border(
                           top: BorderSide(color: Color(0xFFF0F0F5))),
-                      color: index.isEven ? null : const Color(0xFFF9FAFB),
+                      color: hasItemDiscount
+                          ? const Color(0xFFFFF8F0)
+                          : (index.isEven ? null : const Color(0xFFF9FAFB)),
                     ),
                     child: Row(
                       children: [
@@ -1221,23 +1266,186 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
                                 style: const TextStyle(
                                     fontWeight: FontWeight.w500))),
                         Expanded(
-                            child: Text(
-                                _currencyFormat.format(item.unitPrice),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(
+                                  _currencyFormat.format(item.unitPrice),
+                                  textAlign: TextAlign.right,
+                                  style: TextStyle(
+                                      fontWeight: FontWeight.w500,
+                                      color: hasItemDiscount
+                                          ? Colors.grey[600]
+                                          : null,
+                                      decoration: hasItemDiscount
+                                          ? TextDecoration.lineThrough
+                                          : null)),
+                              if (hasItemDiscount)
+                                Text(
+                                  _currencyFormat.format(effectiveUnitPrice),
+                                  textAlign: TextAlign.right,
+                                  style: const TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w500,
+                                      color: Colors.orange),
+                                ),
+                            ],
+                          ),
+                        ),
+                        Expanded(
+                          flex: 1,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(
+                                discountDisplay,
                                 textAlign: TextAlign.right,
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.w500))),
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: hasItemDiscount
+                                        ? Colors.orange.shade700
+                                        : Colors.grey[400]),
+                              ),
+                              if (discountSubtext.isNotEmpty)
+                                Text(
+                                  discountSubtext,
+                                  textAlign: TextAlign.right,
+                                  style: TextStyle(
+                                      fontSize: 10,
+                                      color: Colors.orange.shade300),
+                                ),
+                            ],
+                          ),
+                        ),
                         Expanded(
                             child: Text(
-                                _currencyFormat.format(item.totalPrice),
+                                _currencyFormat.format(totalWithDiscount),
                                 textAlign: TextAlign.right,
-                                style: const TextStyle(
+                                style: TextStyle(
                                     fontWeight: FontWeight.bold,
-                                    color: Color(0xFF7C3AED)))),
+                                    color: hasItemDiscount
+                                        ? Colors.orange.shade700
+                                        : const Color(0xFF7C3AED)))),
                       ],
                     ),
                   );
                 }),
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+// Add this method to show discount summary
+  Widget _buildDiscountSummary() {
+    // Calculate total item discounts
+    double totalItemDiscount = 0;
+    int discountedItemsCount = 0;
+
+    for (var item in _sale!.items ?? []) {
+      final hasItemDiscount = item.itemDiscountAmount > 0;
+      if (hasItemDiscount) {
+        discountedItemsCount++;
+        final discountType = item.itemDiscountType;
+        final discountValue = item.itemDiscountValue;
+        final discountAmount = item.itemDiscountAmount;
+
+        double itemTotalDiscount = 0;
+        if (discountType == 'percent') {
+          // Percent discount: discountValue is the percentage
+          itemTotalDiscount = (item.unitPrice * discountValue / 100) * item.quantity;
+        } else {
+          // Fixed discount: discountAmount is per unit
+          itemTotalDiscount = discountAmount * item.quantity;
+        }
+        totalItemDiscount += itemTotalDiscount;
+      }
+    }
+
+    final hasInvoiceDiscount = _sale!.discountAmount > 0;
+
+    if (totalItemDiscount == 0 && !hasInvoiceDiscount) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(top: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF8F0),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.orange.withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.local_offer,
+                    size: 16, color: Colors.orange),
+              ),
+              const SizedBox(width: 10),
+              const Text('Discount Breakdown',
+                  style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF2D3142))),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (discountedItemsCount > 0) ...[
+            _buildDiscountSummaryRow(
+                'Item Discounts ($discountedItemsCount item${discountedItemsCount > 1 ? 's' : ''})',
+                totalItemDiscount),
+            if (hasInvoiceDiscount) ...[
+              const Divider(height: 16),
+              _buildDiscountSummaryRow(
+                  'Invoice Discount', _sale!.discountAmount),
+            ],
+            const Divider(height: 16),
+            _buildDiscountSummaryRow(
+                'Total Discount',
+                totalItemDiscount + _sale!.discountAmount,
+                isBold: true),
+          ] else if (hasInvoiceDiscount) ...[
+            _buildDiscountSummaryRow(
+                'Invoice Discount', _sale!.discountAmount,
+                isBold: true),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDiscountSummaryRow(String label, double amount, {bool isBold = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+              color: isBold ? const Color(0xFF2D3142) : Colors.grey[700],
+            ),
+          ),
+          Text(
+            '-${_currencyFormat.format(amount)}',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
+              color: isBold ? Colors.orange.shade700 : Colors.orange.shade600,
             ),
           ),
         ],

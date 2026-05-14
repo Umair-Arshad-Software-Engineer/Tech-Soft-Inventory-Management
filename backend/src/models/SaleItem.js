@@ -58,7 +58,26 @@ module.exports = (sequelize) => {
       validate: {
         isDecimal: { msg: 'Total price must be a valid decimal number' }
       }
-    }
+    },
+    item_discount_type: {
+      type: DataTypes.ENUM('percent', 'fixed'),
+      allowNull: false,
+      defaultValue: 'fixed'
+    },
+    item_discount_value: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: false,
+      defaultValue: 0.00
+    },
+    item_discount_amount: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: false,
+      defaultValue: 0.00
+    },
+    effective_unit_price: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: true,
+    },
   }, {
     tableName: 'sale_items',
     timestamps: true,

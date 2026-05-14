@@ -368,8 +368,23 @@ exports.createSale = async (req, res) => {
         });
       }
 
+      // const unitPrice = parseFloat(item.unit_price ?? product.sale_price);
+      // const totalPrice = unitPrice * parseInt(item.quantity);
+      // subtotal += totalPrice;
+
+      // itemSnapshots.push({
+      //   product_id: product.id,
+      //   product_name: product.item_name,
+      //   barcode: product.barcode,
+      //   unit_price: unitPrice,
+      //   quantity: parseInt(item.quantity),
+      //   total_price: totalPrice,
+      // });
+      // In createSale, update the item snapshot and total calculation:
       const unitPrice = parseFloat(item.unit_price ?? product.sale_price);
-      const totalPrice = unitPrice * parseInt(item.quantity);
+      const itemDiscountAmount = parseFloat(item.item_discount_amount ?? 0);
+      const effectiveUnitPrice = parseFloat(item.effective_unit_price ?? (unitPrice - itemDiscountAmount));
+      const totalPrice = effectiveUnitPrice * parseInt(item.quantity);
       subtotal += totalPrice;
 
       itemSnapshots.push({
@@ -377,6 +392,10 @@ exports.createSale = async (req, res) => {
         product_name: product.item_name,
         barcode: product.barcode,
         unit_price: unitPrice,
+        item_discount_type: item.item_discount_type || 'fixed',
+        item_discount_value: parseFloat(item.item_discount_value ?? 0),
+        item_discount_amount: itemDiscountAmount,
+        effective_unit_price: effectiveUnitPrice,
         quantity: parseInt(item.quantity),
         total_price: totalPrice,
       });

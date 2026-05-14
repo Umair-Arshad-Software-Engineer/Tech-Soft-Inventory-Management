@@ -1,21 +1,3 @@
-// const express = require('express');
-// const router = express.Router();
-// const saleController = require('../controllers/saleController');
-
-// // ── Specific routes FIRST (before /:id) ──
-// router.get('/',                   saleController.getAllSales);
-// router.post('/',                  saleController.createSale);
-// router.get('/summary/daily',      saleController.getDailySummary);
-// router.get('/credit/summary',     saleController.getCreditSalesSummary);
-
-// // ── IMPORTANT: Put /:id/returns BEFORE /:id ──
-// router.get('/:id/returns',        saleController.getSaleReturns);  // ← MOVED UP
-
-// // ── Parameterized routes AFTER ──
-// router.get('/:id',                saleController.getSaleById);
-// router.put('/:id',                saleController.updateSale);
-// router.delete('/:id',             saleController.deleteSale);
-// router.post('/:id/payment',       saleController.recordPayment);
 
 // module.exports = router;    
 const express = require('express');
